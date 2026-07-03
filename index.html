@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>広告パフォーマンス集計</title>
+<style>
+  :root{
+    --bg:#EEF1F4;
+    --panel:#FFFFFF;
+    --ink:#1C2126;
+    --ink-2:#69737F;
+    --line:#DDE2E8;
+    --line-strong:#C6CDD6;
+    --accent:#1E56C8;
+    --accent-soft:#EBF0FB;
+    --total-bg:#F3F5F8;
+    --good:#1D9E75;
+    --warn:#BA7517;
+    --bad:#E24B4A;
+    --radius:10px;
+    --mono:"SFMono-Regular","Consolas","Menlo",monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Noto Sans JP","Yu Gothic UI",sans-serif;
+    font-size:13px;
+    line-height:1.6;
+    padding:0 0 80px;
+  }
+  header{
+    background:var(--panel);
+    border-bottom:1px solid var(--line);
+    padding:14px 28px;
+    display:flex;align-items:baseline;gap:14px;
+    position:sticky;top:0;z-index:20;
+  }
+  header h1{font-size:15px;font-weight:700;letter-spacing:.04em}
+  header .sub{color:var(--ink-2);font-size:11.5px}
+  main{max-width:1080px;margin:22px auto 0;padding:0 20px}
+
+  /* 入力エリア */
+  .input-grid{display:grid;grid-template-columns:1fr 320px;gap:14px}
+  @media(max-width:820px){.input-grid{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px}
+  .card h2{font-size:12px;font-weight:700;color:var(--ink-2);letter-spacing:.08em;margin-bottom:8px}
+  textarea{
+    width:100%;border:1px solid var(--line-strong);border-radius:6px;
+    padding:10px;font-family:var(--mono);font-size:11.5px;line-height:1.5;
+    color:var(--ink);background:#FBFCFD;resize:vertical;
+  }
+  textarea:focus{outline:2px solid var(--accent);outline-offset:-1px}
+  #dataInput{height:220px}
+  #renameInput{height:110px}
+  .hint{color:var(--ink-2);font-size:11px;margin-top:6px}
+  .btn{
+    display:block;width:100%;margin-top:12px;
+    background:var(--accent);color:#fff;border:none;border-radius:6px;
+    padding:11px 0;font-size:13.5px;font-weight:700;letter-spacing:.1em;cursor:pointer;
+  }
+  .btn:hover{background:#194AAE}
+  .btn:focus-visible{outline:3px solid #9DB8EE;outline-offset:1px}
+
+  /* ステータス */
+  #status{margin-top:14px;display:none}
+  .status-ok{
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:10px 16px;display:flex;flex-wrap:wrap;gap:6px 22px;font-size:12px;color:var(--ink-2);
+  }
+  .status-ok b{color:var(--ink);font-family:var(--mono)}
+  .warn-box{
+    margin-top:8px;background:#FCF4EA;border:1px solid #E8CBA4;border-radius:var(--radius);
+    padding:10px 16px;font-size:12px;color:#7A5410;
+  }
+  .warn-box span{font-family:var(--mono);display:block;margin-top:2px}
+
+  /* テーブルナビ */
+  #nav{display:none;position:sticky;top:53px;z-index:10;margin-top:16px}
+  #nav .nav-inner{
+    background:var(--panel);border:1px solid var(--line);border-radius:999px;
+    display:inline-flex;gap:2px;padding:4px;
+  }
+  #nav a{
+    text-decoration:none;color:var(--ink-2);font-size:12px;font-weight:600;
+    padding:5px 13px;border-radius:999px;
+  }
+  #nav a:hover{background:var(--accent-soft);color:var(--accent)}
+
+  /* 結果テーブル */
+  .result{margin-top:16px;display:none}
+  .tbl-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;margin-bottom:16px}
+  .tbl-title{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  .tbl-title .num{
+    width:24px;height:24px;border-radius:50%;background:var(--ink);color:#fff;
+    display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;
+  }
+  .tbl-title h3{font-size:14px;font-weight:700}
+  table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+  th{
+    text-align:right;font-size:11px;color:var(--ink-2);font-weight:600;
+    border-bottom:2px solid var(--line-strong);padding:6px 10px;white-space:nowrap;
+  }
+  th:first-child{text-align:left}
+  td{
+    text-align:right;padding:7px 10px;border-bottom:1px solid var(--line);
+    font-family:var(--mono);font-size:12px;white-space:nowrap;
+  }
+  td:first-child{
+    text-align:left;font-family:inherit;font-weight:600;font-size:12.5px;
+  }
+  tr:last-child td{border-bottom:none}
+  tr.total td{background:var(--total-bg);font-weight:700}
+  tr.total td:first-child{font-weight:700}
+  tr.subrow td:first-child{padding-left:24px;color:var(--ink-2);font-weight:400}
+  tr.subrow td{color:var(--ink-2)}
+  .empty{color:var(--ink-2);font-size:12px;padding:4px 2px}
+  .c-good{color:var(--good) !important;font-weight:700}
+  .c-warn{color:var(--warn) !important;font-weight:700}
+  .c-bad{color:var(--bad) !important;font-weight:700}
+  @media(max-width:640px){
+    main{padding:0 10px}
+    .tbl-card{overflow-x:auto}
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>広告パフォーマンス集計</h1>
+  <span class="sub">ダッシュボードの表を貼り付け → ①〜⑤のテーブルを自動生成</span>
+</header>
+
+<main>
+  <div class="input-grid">
+    <div class="card">
+      <h2>運用データ貼り付け</h2>
+      <textarea id="dataInput" placeholder="ダッシュボードの一覧をそのままコピーして貼り付けてください（キャンペーン名と ¥ で始まる数値行を自動認識します）"></textarea>
+      <p class="hint">「合計」行は自動的にスキップします。抽出列：消化金額・MCV・CV・売上・利益</p>
+    </div>
+    <div class="card">
+      <h2>リネームマップ（任意）</h2>
+      <textarea id="renameInput" placeholder="1行につき1件。例：&#10;NST1v2_brd_7m → NST1v3_brd_101&#10;NST10v5_brd_7m → NST10v5_brd"></textarea>
+      <p class="hint">「変換前 → 変換後」形式（= や -> も可）。リネーム後の名前で全集計を行います。</p>
+      <button class="btn" id="runBtn">集計する</button>
+    </div>
+  </div>
+
+  <div id="status"></div>
+
+  <nav id="nav"><div class="nav-inner">
+    <a href="#t1">① シリーズ別</a>
+    <a href="#t2">② ターゲティング別</a>
+    <a href="#t3">③ サブシリーズ別</a>
+    <a href="#t4">④ 縦横</a>
+    <a href="#t5">⑤ 市区切り×サブ</a>
+  </div></nav>
+
+  <div class="result" id="result"></div>
+</main>
+
+<script>
+// ===== 集計ロジック =====
+const CITY_TAGS = ['st','kb','ks','yh','fo','hs','kt','sp'];
+
+function parseNum(s){
+  if(s == null) return 0;
+  const v = parseFloat(String(s).replace(/[¥,%\s]/g,'').replace(/,/g,''));
+  return isNaN(v) ? 0 : v;
+}
+
+function parseRenameMap(text){
+  const map = [];
+  (text||'').split(/\n/).forEach(line=>{
+    const l = line.trim();
+    if(!l || l.startsWith('#')) return;
+    const m = l.split(/\s*(?:→|->|=>|=|\t)\s*/);
+    if(m.length >= 2 && m[0] && m[1]) map.push([m[0], m[1]]);
+  });
+  return map;
+}
+
+function applyRenames(name, map){
+  let out = name;
+  for(const [from,to] of map){
+    if(out.includes(from)) out = out.split(from).join(to);
+  }
+  return out;
+}
+
+function parseData(text, renameMap){
+  const lines = (text||'').split(/\r?\n/);
+  const records = [];
+  let current = null;
+
+  const isNameLine = l =>
+    /NST\d*/.test(l) && l.includes('_') && !l.includes('\t') && !l.startsWith('¥') && !l.startsWith('合計');
+
+  const metricsFromFields = f => ({
+    spend: parseNum(f[0]), mcv: parseNum(f[4]), cv: parseNum(f[7]),
+    sales: parseNum(f[9]), profit: parseNum(f[10]),
+  });
+
+  for(const raw of lines){
+    const line = raw.replace(/\u00a0/g,' ').trim();
+    if(!line || line.startsWith('合計')) continue;
+
+    if(line.includes('\t')){
+      const fields = line.split('\t').map(s=>s.trim());
+      if(/NST\d/.test(fields[0]) && fields[0].includes('_') && fields.length >= 12){
+        records.push({ name: applyRenames(fields[0].replace(/⎘/g,'').trim(), renameMap), ...metricsFromFields(fields.slice(1)) });
+        current = null;
+        continue;
+      }
+      if(fields[0].startsWith('¥') && fields.length >= 11){
+        if(current){
+          records.push({ name: current, ...metricsFromFields(fields) });
+          current = null;
+        }
+        continue;
+      }
+    }
+    if(isNameLine(line)){
+      current = applyRenames(line.replace(/⎘/g,'').trim(), renameMap);
+    }
+  }
+  return records;
+}
+
+function classify(name){
+  const idx = name.indexOf('mktag');
+  const part = idx >= 0 ? name.slice(idx + 5) : name;
+
+  let m = part.match(/YT_NST(\d+)(?:v(\d+))?/) || part.match(/NST(\d+)(?:v(\d+))?/);
+  if(!m && idx >= 0) m = name.match(/NST(\d+)(?:v(\d+))?/);
+
+  const seriesNum = m ? parseInt(m[1],10) : null;
+  const vNum = m && m[2] != null ? parseInt(m[2],10) : null;
+  const series = seriesNum != null ? 'NST'+seriesNum : '不明';
+  const sub = seriesNum != null ? 'NST'+seriesNum+(vNum!=null?'v'+vNum:'') : '不明';
+
+  const tokens = part.split('_').filter(Boolean);
+  const hasBrd = tokens.includes('brd');
+  const age = tokens.find(t=>/^(18-24|25-34|35-44|45-54)$/.test(t)) || null;
+  const yoko = tokens.includes('yoko');
+  const hasMonth = tokens.some(t=>/^\d+m$/.test(t));
+  const hasCity = tokens.some(t=>CITY_TAGS.includes(t));
+  const hasPureNum = tokens.some(t=>/^\d+$/.test(t));
+
+  let target;
+  if(hasBrd && (!age || yoko)) target = 'brd';
+  else if(age) target = 'age';
+  else if(hasMonth || hasCity || hasPureNum) target = 'city';
+  else target = 'other';
+
+  return { seriesNum, vNum, series, sub, target, age, yoko };
+}
+
+function aggregate(records){
+  const rows = records.map(r=>({ ...r, ...classify(r.name) }));
+  const zero = ()=>({spend:0,mcv:0,cv:0,sales:0,profit:0,count:0});
+  const add = (a,r)=>{a.spend+=r.spend;a.mcv+=r.mcv;a.cv+=r.cv;a.sales+=r.sales;a.profit+=r.profit;a.count+=1;};
+  const groupBy = (list,keyFn)=>{
+    const m = new Map();
+    for(const r of list){ const k=keyFn(r); if(!m.has(k)) m.set(k,zero()); add(m.get(k),r); }
+    return m;
+  };
+  const total = list=>{const t=zero(); list.forEach(r=>add(t,r)); return t;};
+
+  const t1 = [...groupBy(rows,r=>r.series).entries()]
+    .sort((a,b)=>(parseInt(a[0].replace('NST',''))||1e9)-(parseInt(b[0].replace('NST',''))||1e9));
+
+  const brdRows = rows.filter(r=>r.target==='brd');
+  const ageRows = rows.filter(r=>r.target==='age');
+  const cityRows = rows.filter(r=>r.target==='city');
+  const otherRows = rows.filter(r=>r.target==='other');
+  const ageOrder = ['18-24','25-34','35-44','45-54'];
+  const ageSub = ageOrder.map(a=>[a, total(ageRows.filter(r=>r.age===a))]).filter(([,t])=>t.count>0);
+
+  const subGroup = list=>{
+    const m = groupBy(list,r=>r.sub);
+    for(const [k,v] of m){
+      const mm = k.match(/NST(\d+)(?:v(\d+))?/);
+      v._k = mm ? [parseInt(mm[1]), mm[2]!=null?parseInt(mm[2]):-1] : [1e9,1e9];
+    }
+    return [...m.entries()].sort((a,b)=>a[1]._k[0]-b[1]._k[0] || a[1]._k[1]-b[1]._k[1]);
+  };
+
+  return {
+    rows,
+    t1, t1Total: total(rows),
+    t2:{ brd:total(brdRows), age:total(ageRows), ageSub, city:total(cityRows),
+         other: otherRows.length ? total(otherRows) : null },
+    t3: subGroup(rows),
+    t4:{ tate: total(rows.filter(r=>!r.yoko)), yoko: total(rows.filter(r=>r.yoko)) },
+    t5: subGroup(cityRows), t5Total: total(cityRows),
+    others: otherRows.map(r=>r.name),
+  };
+}
+
+// ===== 表示 =====
+const yen = v => '¥' + Math.round(v).toLocaleString('ja-JP');
+
+function roasCell(t){
+  if(t.spend === 0) return '<td>-</td>';
+  const r = Math.round(t.sales / t.spend * 100);
+  const cls = r >= 150 ? 'c-good' : r >= 100 ? 'c-warn' : 'c-bad';
+  return `<td class="${cls}">${r}%</td>`;
+}
+function profitCell(t){
+  const cls = t.profit >= 0 ? 'c-good' : 'c-bad';
+  return `<td class="${cls}">${yen(t.profit)}</td>`;
+}
+function metricCells(t, withCount){
+  return `<td>${yen(t.spend)}</td><td>${yen(t.sales)}</td>${roasCell(t)}${profitCell(t)}` +
+    `<td>${Math.round(t.cv)}</td>` +
+    `<td>${t.cv > 0 ? yen(t.spend / t.cv) : '-'}</td>` +
+    `<td>${t.mcv > 0 ? yen(t.spend / t.mcv) : '-'}</td>` +
+    (withCount ? `<td>${t.count}</td>` : '');
+}
+function tableHead(keyLabel, withCount){
+  return `<tr><th>${keyLabel}</th><th>消化金額</th><th>売上</th><th>ROAS</th><th>利益</th><th>CV</th><th>CPA</th><th>MCPA</th>${withCount?'<th>CP数</th>':''}</tr>`;
+}
+function tableCard(id, num, title, bodyHtml, keyLabel, withCount){
+  return `<section class="tbl-card" id="${id}">
+    <div class="tbl-title"><span class="num">${num}</span><h3>${title}</h3></div>
+    ${bodyHtml === null
+      ? '<p class="empty">該当するキャンペーンがありません。</p>'
+      : `<table><thead>${tableHead(keyLabel, withCount)}</thead><tbody>${bodyHtml}</tbody></table>`}
+  </section>`;
+}
+
+function render(agg){
+  // ①
+  let b1 = agg.t1.map(([k,t])=>`<tr><td>${k}</td>${metricCells(t)}</tr>`).join('');
+  b1 += `<tr class="total"><td>合計</td>${metricCells(agg.t1Total)}</tr>`;
+
+  // ②
+  let b2 = '';
+  if(agg.t2.brd.count) b2 += `<tr><td>brd</td>${metricCells(agg.t2.brd)}</tr>`;
+  if(agg.t2.age.count){
+    b2 += `<tr><td>年齢セグ 合計</td>${metricCells(agg.t2.age)}</tr>`;
+    b2 += agg.t2.ageSub.map(([a,t])=>`<tr class="subrow"><td>${a}</td>${metricCells(t)}</tr>`).join('');
+  }
+  if(agg.t2.city.count) b2 += `<tr><td>市区切り 合計</td>${metricCells(agg.t2.city)}</tr>`;
+  if(agg.t2.other) b2 += `<tr><td>その他</td>${metricCells(agg.t2.other)}</tr>`;
+
+  // ③
+  const b3 = agg.t3.map(([k,t])=>`<tr><td>${k}</td>${metricCells(t)}</tr>`).join('');
+
+  // ④
+  const b4 = `<tr><td>縦動画</td>${metricCells(agg.t4.tate, true)}</tr>` +
+             `<tr><td>横動画</td>${metricCells(agg.t4.yoko, true)}</tr>`;
+
+  // ⑤
+  let b5 = null;
+  if(agg.t5.length){
+    b5 = agg.t5.map(([k,t])=>`<tr><td>${k}</td>${metricCells(t)}</tr>`).join('');
+    b5 += `<tr class="total"><td>合計</td>${metricCells(agg.t5Total)}</tr>`;
+  }
+
+  document.getElementById('result').innerHTML =
+    tableCard('t1','①','NSTシリーズ別', b1, 'シリーズ') +
+    tableCard('t2','②','ターゲティング別（brd / 年齢セグ / 市区切り）', b2 || null, 'セグメント') +
+    tableCard('t3','③','NSTサブシリーズ別（v単位）', b3 || null, 'サブシリーズ') +
+    tableCard('t4','④','縦動画 vs 横動画', b4, '動画タイプ', true) +
+    tableCard('t5','⑤','市区切り × NSTサブシリーズ別', b5, 'サブシリーズ');
+  document.getElementById('result').style.display = 'block';
+  document.getElementById('nav').style.display = 'block';
+}
+
+function run(){
+  const map = parseRenameMap(document.getElementById('renameInput').value);
+  const recs = parseData(document.getElementById('dataInput').value, map);
+  const status = document.getElementById('status');
+  status.style.display = 'block';
+
+  if(!recs.length){
+    status.innerHTML = '<div class="warn-box">キャンペーン行を認識できませんでした。ダッシュボードの一覧（キャンペーン名と数値行）をそのまま貼り付けてください。</div>';
+    document.getElementById('result').style.display = 'none';
+    document.getElementById('nav').style.display = 'none';
+    return;
+  }
+
+  const agg = aggregate(recs);
+  const renamedCount = map.length
+    ? recs.filter(r => map.some(([f,t]) => r.name.includes(t))).length : 0;
+
+  let html = `<div class="status-ok">
+    <span>読み込み <b>${recs.length}</b> 件</span>
+    <span>消化金額 <b>${yen(agg.t1Total.spend)}</b></span>
+    <span>売上 <b>${yen(agg.t1Total.sales)}</b></span>
+    <span>CV <b>${Math.round(agg.t1Total.cv)}</b></span>
+    ${map.length ? `<span>リネーム適用 <b>${map.length}</b> ルール</span>` : ''}
+  </div>`;
+  if(agg.others.length){
+    html += `<div class="warn-box">分類できないキャンペーンが ${agg.others.length} 件あります（「その他」として集計）：
+      ${agg.others.map(n=>`<span>${n}</span>`).join('')}</div>`;
+  }
+  status.innerHTML = html;
+  render(agg);
+}
+
+document.getElementById('runBtn').addEventListener('click', run);
+</script>
+</body>
+</html>
