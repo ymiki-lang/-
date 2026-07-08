@@ -384,34 +384,63 @@ function applyRenames(name, map){
   return out;
 }
 
+// 既定の列順（見出し行が見つからない場合のフォールバック用）
+const DEFAULT_HEADER = ['消化金額','CTR','CPC','CPM','MCV','MCVR','MCPA','CV','CVR','売上','利益','ROAS','CPA','記事URL','メモ'];
+function buildColMap(headerFields){
+  const map = {};
+  headerFields.forEach((f,i)=>{ if(!(f in map)) map[f] = i; });
+  return map;
+}
+const REQUIRED_COLS = ['消化金額','MCV','CV','売上','利益'];
+
 function parseData(text, renameMap){
-  const lines = (text||'').split(/\r?\n/);
+  const lines = (text||'').split(/\r?\n/).map(l=>l.replace(/\u00a0/g,' ').trim());
   const records = [];
   let current = null;
+  const warnings = [];
+
+  // 見出し行を探す（列の並びが画面サイズ・列設定によって変わっても対応できるように、
+  // 位置ではなく列名でマッピングする）
+  let colMap = null;
+  for(const line of lines){
+    if(!line.includes('\t')) continue;
+    const fields = line.split('\t').map(s=>s.trim());
+    if(REQUIRED_COLS.every(c => fields.includes(c))){
+      colMap = buildColMap(fields);
+      break;
+    }
+  }
+  let usedFallback = false;
+  if(!colMap){
+    colMap = buildColMap(DEFAULT_HEADER);
+    usedFallback = true;
+  }
 
   const isNameLine = l =>
     /NST\d*/.test(l) && l.includes('_') && !l.includes('\t') && !l.startsWith('¥') && !l.startsWith('合計');
 
+  const maxIdx = Math.max(...REQUIRED_COLS.map(c => colMap[c]));
   const metricsFromFields = f => ({
-    spend: parseNum(f[0]), mcv: parseNum(f[4]), cv: parseNum(f[7]),
-    sales: parseNum(f[9]), profit: parseNum(f[10]),
+    spend: parseNum(f[colMap['消化金額']]), mcv: parseNum(f[colMap['MCV']]), cv: parseNum(f[colMap['CV']]),
+    sales: parseNum(f[colMap['売上']]), profit: parseNum(f[colMap['利益']]),
   });
 
-  for(const raw of lines){
-    const line = raw.replace(/\u00a0/g,' ').trim();
+  for(const line of lines){
     if(!line || line.startsWith('合計')) continue;
 
     if(line.includes('\t')){
       const fields = line.split('\t').map(s=>s.trim());
-      if(/NST\d/.test(fields[0]) && fields[0].includes('_') && fields.length >= 12){
+      if(/NST\d/.test(fields[0]) && fields[0].includes('_') && fields.length > maxIdx + 1){
         records.push({ name: applyRenames(fields[0].replace(/⎘/g,'').trim(), renameMap), ...metricsFromFields(fields.slice(1)) });
         current = null;
         continue;
       }
-      if(fields[0].startsWith('¥') && fields.length >= 11){
+      if(fields[0].startsWith('¥') && fields.length > maxIdx){
         if(current){
           records.push({ name: current, ...metricsFromFields(fields) });
           current = null;
+        }else if(fields.length <= maxIdx + 1){
+          warnings.push('数値行の列数が想定より少なく、一部の項目を正しく読み取れていない可能性があります。');
         }
         continue;
       }
@@ -420,7 +449,7 @@ function parseData(text, renameMap){
       current = applyRenames(line.replace(/⎘/g,'').trim(), renameMap);
     }
   }
-  return records;
+  return { records, usedFallback, warnings: [...new Set(warnings)] };
 }
 
 function classify(name){
@@ -743,7 +772,7 @@ function buildCustomTable(){
 function run(){
   refreshUserTags();
   const map = parseRenameMap(document.getElementById('renameInput').value);
-  const recs = parseData(document.getElementById('dataInput').value, map);
+  const { records: recs, usedFallback, warnings } = parseData(document.getElementById('dataInput').value, map);
   const status = document.getElementById('status');
   status.style.display = 'block';
 
@@ -766,6 +795,13 @@ function run(){
     <span>CV <b>${Math.round(agg.t1Total.cv)}</b></span>
     ${map.length ? `<span>リネーム <b>${map.length}</b> ルール適用</span>` : ''}
   </div>`;
+  if(usedFallback){
+    html += `<div class="warn-box">貼り付けデータに見出し行（消化金額・MCV・CV・売上・利益）が見つからなかったため、既定の列順で読み取りました。
+      画面幅や列設定によって表示列が変わる環境では数値がズレる場合があるため、コピーする際は<b>見出し行を含めて</b>貼り付けることをおすすめします。</div>`;
+  }
+  if(warnings.length){
+    html += `<div class="warn-box">${warnings.map(w=>esc(w)).join('<br>')}</div>`;
+  }
   if(agg.others.length){
     html += `<div class="warn-box">分類できないキャンペーンが ${agg.others.length} 件あります（「その他」として集計）：
       ${agg.others.map(n=>`<span>${esc(n)}</span>`).join('')}</div>`;
