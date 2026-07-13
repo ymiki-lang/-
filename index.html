@@ -85,10 +85,17 @@
   .input-grid{display:grid;grid-template-columns:1fr;gap:0}
   #dataInput{height:190px}
   .run-row{display:flex;align-items:center;gap:14px;margin-top:12px;flex-wrap:wrap}
-  .offer-filter{
-    display:flex;align-items:center;gap:8px;margin-top:12px;font-size:12.5px;color:var(--ink-2);cursor:pointer;
+  .offer-filter-group{margin-top:12px}
+  .offer-filter-title{font-size:12.5px;color:var(--ink-2);margin-bottom:8px;font-weight:600}
+  .offer-filter-options{display:flex;flex-wrap:wrap;gap:8px}
+  .offer-chip{
+    display:flex;align-items:center;gap:7px;
+    border:1.5px solid var(--line-strong);border-radius:999px;
+    padding:6px 14px 6px 10px;font-size:12.5px;cursor:pointer;background:#FBFCFE;
+    transition:border-color .12s, background .12s;
   }
-  .offer-filter input{width:16px;height:16px;accent-color:var(--usr);cursor:pointer}
+  .offer-chip input{width:15px;height:15px;accent-color:var(--usr);cursor:pointer}
+  .offer-chip:has(input:checked){border-color:var(--usr);background:#F1EAFE;color:#5B21B6;font-weight:700}
   /* 設定 collapsible */
   details.fold{
     background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
@@ -242,10 +249,10 @@
   <div class="card">
     <div class="card-title"><span class="chip gray">▶</span><h3>運用データ貼り付け</h3><span class="note">「合計」行は自動スキップ／抽出列：消化金額・MCV・CV・売上・利益</span></div>
     <textarea id="dataInput" placeholder="ダッシュボードの一覧をそのままコピーして貼り付けてください（キャンペーン名と ¥ で始まる数値行を自動認識します）"></textarea>
-    <label class="offer-filter">
-      <input type="checkbox" id="offerFilter" checked>
-      1650円オファー以外のCPを除外して集計する（CP名に「1650」を含まないものを対象外にする）
-    </label>
+    <div class="offer-filter-group">
+      <div class="offer-filter-title">オファーで絞り込む(未選択なら全CPを集計、選んだオファーだけ集計)</div>
+      <div class="offer-filter-options" id="offerFilterOptions"></div>
+    </div>
     <div class="run-row">
       <button class="btn" id="runBtn">集計する</button>
       <button class="btn secondary small" id="saveBtn" title="リネームマップとタグ辞書をURLに埋め込みます">設定をURLに保存</button>
@@ -287,7 +294,7 @@
         <span><i style="background:#2E5BE6"></i>NST10v5 = シリーズ10・バージョン5（①は数字のみで大括り、③はv単位）</span>
         <span><i style="background:#1D9E75"></i>ターゲティング系タグ（brd / 年齢 / 市区切り）</span>
         <span><i style="background:#C07000"></i>yoko = 横動画（なければ縦動画）</span>
-        <span><i style="background:#DB2777"></i>1650 = 1650円オファー（対象フィルタ用タグ）</span>
+        <span><i style="background:#DB2777"></i>オファー金額タグ（例：1650、7m。対象フィルタ用）</span>
         <span><i style="background:#7C3AED"></i>ユーザー登録タグ（タグ辞書）</span>
       </div>
 
@@ -297,11 +304,12 @@
         <tbody>
           <tr><td>brd</td><td>ブロード配信</td><td>② brdグループ（最優先。ただし年齢タグ併記でyokoなしの場合は年齢が優先）</td></tr>
           <tr><td>18-24 / 25-34 / 35-44 / 45-54</td><td>年齢セグメント</td><td>② 年齢セグメントグループ</td></tr>
-          <tr><td>6m / 7m など</td><td>月限定（6月・7月…）</td><td>② 市区切りグループ判定に使用</td></tr>
+          <tr><td>6m / 8m など</td><td>月限定（6月・8月…）</td><td>② 市区切りグループ判定に使用</td></tr>
+          <tr><td>7m</td><td>7月限定 ＋ 9900円オファー（7月限定）</td><td>② 市区切りグループ判定に使用／「オファーで絞り込む」のチェック対象</td></tr>
           <tr><td>st / kb / ks / yh / fo / hs / kt / sp</td><td>さいたま / 神戸 / 川崎 / 横浜 / 福岡 / 広島 / 京都 / 札幌</td><td>② 市区切りグループ</td></tr>
           <tr><td>1 / 2 / 101 など（数字のみ）</td><td>市区切り番号</td><td>② 市区切りグループ（後ろに _new が付いても同様）</td></tr>
           <tr><td>yoko</td><td>横動画</td><td>④ 横動画（タグなし = 縦動画）</td></tr>
-          <tr><td>1650</td><td>1650円オファー</td><td>今回導入。②で「オファー」フィルタの対象タグ（対象外CPは既定で集計から除外）</td></tr>
+          <tr><td>1650</td><td>1650円オファー</td><td>データ入力欄の「オファーで絞り込む」でチェックすると、このタグを含むCPだけを集計</td></tr>
           <tr><td>new</td><td>再入稿</td><td>影響なし</td></tr>
           <tr><td>nare / os / ng</td><td>特殊タグ</td><td>影響なし（除外もしない）</td></tr>
           <tr><td>wareki</td><td>和暦</td><td>影響なし</td></tr>
@@ -348,6 +356,7 @@
           <option value="age">年齢セグメント</option>
           <option value="month">月タグ</option>
           <option value="city">都市タグ</option>
+          <option value="offer">オファー</option>
         </select>
       </div>
       <div id="ruleWrap">
@@ -369,8 +378,12 @@
 // ===== 集計ロジック =====
 const CITY_TAGS = ['st','kb','ks','yh','fo','hs','kt','sp'];
 // オファー金額タグ（例：1650円オファー）。今後別の価格帯オファーが増えたらここに追加する。
-const OFFER_TAGS = ['1650'];
-const OFFER_NAMES = {'1650':'1650円オファー'};
+// オファー金額タグ一覧。今後別のオファーが増えたらここに追加すれば①〜⑥・フィルタ・カスタム分析すべてに反映される。
+const OFFER_TAGS = ['1650', '7m'];
+const OFFER_NAMES = {
+  '1650': '1650円オファー',
+  '7m': '9900円オファー（7月限定）',
+};
 const CITY_NAMES = {st:'さいたま',kb:'神戸',ks:'川崎',yh:'横浜',fo:'福岡',hs:'広島',kt:'京都',sp:'札幌'};
 const TARGET_LABEL = {brd:'brd', age:'年齢セグ', city:'市区切り', other:'その他'};
 
@@ -570,9 +583,10 @@ function tokenInfo(t){
   if((m = t.match(/^NST(\d+)$/)))       return {cls:'tk-nst', mean:`シリーズ${m[1]}（vなし）`};
   if(t === 'brd')                        return {cls:'tk-tgt', mean:'ブロード配信'};
   if(/^(18-24|25-34|35-44|45-54)$/.test(t)) return {cls:'tk-tgt', mean:`年齢セグメント ${t}`};
+  if(OFFER_NAMES[t] && /^\d+m$/.test(t))  return {cls:'tk-offer', mean:`${OFFER_NAMES[t]}（月限定タグ兼用）`};
+  if(OFFER_NAMES[t])                     return {cls:'tk-offer', mean:OFFER_NAMES[t]};
   if((m = t.match(/^(\d+)m$/)))          return {cls:'tk-tgt', mean:`${m[1]}月限定`};
   if(CITY_NAMES[t])                      return {cls:'tk-tgt', mean:`都市：${CITY_NAMES[t]}`};
-  if(OFFER_NAMES[t])                     return {cls:'tk-offer', mean:OFFER_NAMES[t]};
   if(/^\d+$/.test(t))                    return {cls:'tk-tgt', mean:`市区切り番号 ${t}`};
   if(t === 'yoko')                       return {cls:'tk-yoko', mean:'横動画'};
   if(t === 'new')                        return {cls:'', mean:'再入稿（影響なし）'};
@@ -703,6 +717,7 @@ const AXES = {
   age:{label:'年齢セグメント', key:r=>r.age||'年齢指定なし', sort:'label'},
   month:{label:'月タグ', key:r=>r.month ? r.month.replace('m','月') : '月タグなし', sort:'label'},
   city:{label:'都市タグ', key:r=>r.city ? CITY_NAMES[r.city] : '都市タグなし', sort:'spend'},
+  offer:{label:'オファー', key:r=>r.offer ? OFFER_NAMES[r.offer] : '対象外', sort:'spend'},
 };
 
 function parseRules(text){
@@ -786,12 +801,6 @@ function buildCustomTable(){
 }
 
 // ===== 実行 =====
-function isOfferCP(name){
-  const idx = name.indexOf('mktag');
-  const part = idx >= 0 ? name.slice(idx + 5) : name;
-  return part.split('_').filter(Boolean).some(t => OFFER_TAGS.includes(t));
-}
-
 function run(){
   refreshUserTags();
   const map = parseRenameMap(document.getElementById('renameInput').value);
@@ -799,8 +808,9 @@ function run(){
   const status = document.getElementById('status');
   status.style.display = 'block';
 
-  const filterOn = document.getElementById('offerFilter').checked;
-  const recs = filterOn ? allRecs.filter(r => isOfferCP(r.name)) : allRecs;
+  const checkedOffers = [...document.querySelectorAll('.offerTagChk:checked')].map(el => el.value);
+  const filterOn = checkedOffers.length > 0;
+  const recs = filterOn ? allRecs.filter(r => checkedOffers.includes(classify(r.name).offer)) : allRecs;
   const excludedCount = allRecs.length - recs.length;
 
   if(!allRecs.length){
@@ -810,7 +820,7 @@ function run(){
     return;
   }
   if(!recs.length){
-    status.innerHTML = '<div class="warn-box">「1650」を含むCPが見つかりませんでした。CP名の表記をご確認いただくか、上のチェックを外して全件集計してください。</div>';
+    status.innerHTML = `<div class="warn-box">選択したオファー（${checkedOffers.map(t=>OFFER_NAMES[t]).join('／')}）を含むCPが見つかりませんでした。CP名の表記をご確認いただくか、チェックを外して全件集計してください。</div>`;
     document.getElementById('result').style.display = 'none';
     document.getElementById('nav').style.display = 'none';
     return;
@@ -823,7 +833,7 @@ function run(){
 
   let html = `<div class="status-ok">
     <span>読み込み <b>${recs.length}</b> 件</span>
-    ${filterOn ? `<span>対象外除外 <b>${excludedCount}</b> 件</span>` : ''}
+    ${filterOn ? `<span>絞り込み中 <b>${checkedOffers.map(t=>OFFER_NAMES[t]).join('／')}</b>（対象外 ${excludedCount} 件を除外）</span>` : '<span>フィルタなし（全CP集計）</span>'}
     <span>消化金額 <b>${yen(agg.t1Total.spend)}</b></span>
     <span>売上 <b>${yen(agg.t1Total.sales)}</b></span>
     <span>CV <b>${Math.round(agg.t1Total.cv)}</b></span>
@@ -899,6 +909,16 @@ document.getElementById('saveBtn').addEventListener('click', ()=>{
   }catch(e){ /* 破損したハッシュは無視 */ }
 })();
 refreshUserTags();
+
+// 登録済みオファーごとのチェックボックスを自動生成
+(function buildOfferCheckboxes(){
+  const wrap = document.getElementById('offerFilterOptions');
+  wrap.innerHTML = OFFER_TAGS.map(tag => `
+    <label class="offer-chip">
+      <input type="checkbox" class="offerTagChk" value="${esc(tag)}">
+      ${esc(OFFER_NAMES[tag])}
+    </label>`).join('');
+})();
 </script>
 </body>
 </html>
