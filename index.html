@@ -641,15 +641,15 @@ function profitCell(t){
 }
 function metricCells(t, withCount){
   return `<td>${yen(t.spend)}</td><td>${yen(t.sales)}</td>` +
+    `<td>${t.clicks > 0 ? yen(t.spend / t.clicks) : '-'}</td>` +
     `<td>${t.mcv > 0 ? yen(t.spend / t.mcv) : '-'}</td>` +
     `${roasCell(t)}${profitCell(t)}` +
     `<td>${Math.round(t.cv)}</td>` +
     `<td>${t.cv > 0 ? yen(t.spend / t.cv) : '-'}</td>` +
-    `<td>${t.clicks > 0 ? yen(t.spend / t.clicks) : '-'}</td>` +
     (withCount ? `<td>${t.count}</td>` : '');
 }
 function tableHead(keyLabel, withCount){
-  return `<tr><th>${keyLabel}</th><th>消化金額</th><th>売上</th><th>MCPA</th><th>ROAS</th><th>利益</th><th>CV</th><th>CPA</th><th>CPC</th>${withCount?'<th>CP数</th>':''}</tr>`;
+  return `<tr><th>${keyLabel}</th><th>消化金額</th><th>売上</th><th>CPC</th><th>MCPA</th><th>ROAS</th><th>利益</th><th>CV</th><th>CPA</th>${withCount?'<th>CP数</th>':''}</tr>`;
 }
 function tableCard(id, num, title, bodyHtml, keyLabel, withCount, theme){
   return `<section class="card ${theme || ''}" id="${id}">
