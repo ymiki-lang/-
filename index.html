@@ -85,6 +85,10 @@
   .input-grid{display:grid;grid-template-columns:1fr;gap:0}
   #dataInput{height:190px}
   .run-row{display:flex;align-items:center;gap:14px;margin-top:12px;flex-wrap:wrap}
+  .offer-filter{
+    display:flex;align-items:center;gap:8px;margin-top:12px;font-size:12.5px;color:var(--ink-2);cursor:pointer;
+  }
+  .offer-filter input{width:16px;height:16px;accent-color:var(--usr);cursor:pointer}
   /* 設定 collapsible */
   details.fold{
     background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
@@ -134,6 +138,7 @@
   .tk-nst{color:var(--accent);font-weight:700}
   .tk-tgt{color:var(--good);font-weight:700}
   .tk-yoko{color:#C07000;font-weight:700}
+  .tk-offer{color:#DB2777;font-weight:700}
   .tk-usr{color:var(--usr);font-weight:700}
   .tk-mkr{color:#9AA6B5;font-style:italic}
   /* ===== ステータス ===== */
@@ -171,6 +176,7 @@
     padding:9px 12px;white-space:nowrap;
     background:var(--tc-soft,#EEF2F7);color:var(--tc-dark,#3D4A5E);
     border-bottom:2px solid var(--tc,var(--line-strong));
+    position:sticky;top:0;z-index:3;
   }
   table.data thead th:first-child{text-align:left;border-top-left-radius:8px}
   table.data thead th:last-child{border-top-right-radius:8px}
@@ -204,7 +210,7 @@
   .p-bad{color:#E24B4A;font-weight:700}
   /* ⑥ 名前セル */
   .name-cell{font-family:var(--mono);font-size:11.5px;font-weight:400 !important}
-  .tbl-scroll{overflow-x:auto}
+  .tbl-scroll{overflow:auto;max-height:560px;border-radius:8px}
   /* カスタム分析 */
   .builder-row{display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap;margin-top:6px}
   .builder-row label{font-size:12.5px;color:var(--ink-2);font-weight:700;display:block;margin-bottom:4px}
@@ -236,6 +242,10 @@
   <div class="card">
     <div class="card-title"><span class="chip gray">▶</span><h3>運用データ貼り付け</h3><span class="note">「合計」行は自動スキップ／抽出列：消化金額・MCV・CV・売上・利益</span></div>
     <textarea id="dataInput" placeholder="ダッシュボードの一覧をそのままコピーして貼り付けてください（キャンペーン名と ¥ で始まる数値行を自動認識します）"></textarea>
+    <label class="offer-filter">
+      <input type="checkbox" id="offerFilter" checked>
+      1650円オファー以外のCPを除外して集計する（CP名に「1650」を含まないものを対象外にする）
+    </label>
     <div class="run-row">
       <button class="btn" id="runBtn">集計する</button>
       <button class="btn secondary small" id="saveBtn" title="リネームマップとタグ辞書をURLに埋め込みます">設定をURLに保存</button>
@@ -277,6 +287,7 @@
         <span><i style="background:#2E5BE6"></i>NST10v5 = シリーズ10・バージョン5（①は数字のみで大括り、③はv単位）</span>
         <span><i style="background:#1D9E75"></i>ターゲティング系タグ（brd / 年齢 / 市区切り）</span>
         <span><i style="background:#C07000"></i>yoko = 横動画（なければ縦動画）</span>
+        <span><i style="background:#DB2777"></i>1650 = 1650円オファー（対象フィルタ用タグ）</span>
         <span><i style="background:#7C3AED"></i>ユーザー登録タグ（タグ辞書）</span>
       </div>
 
@@ -290,6 +301,7 @@
           <tr><td>st / kb / ks / yh / fo / hs / kt / sp</td><td>さいたま / 神戸 / 川崎 / 横浜 / 福岡 / 広島 / 京都 / 札幌</td><td>② 市区切りグループ</td></tr>
           <tr><td>1 / 2 / 101 など（数字のみ）</td><td>市区切り番号</td><td>② 市区切りグループ（後ろに _new が付いても同様）</td></tr>
           <tr><td>yoko</td><td>横動画</td><td>④ 横動画（タグなし = 縦動画）</td></tr>
+          <tr><td>1650</td><td>1650円オファー</td><td>今回導入。②で「オファー」フィルタの対象タグ（対象外CPは既定で集計から除外）</td></tr>
           <tr><td>new</td><td>再入稿</td><td>影響なし</td></tr>
           <tr><td>nare / os / ng</td><td>特殊タグ</td><td>影響なし（除外もしない）</td></tr>
           <tr><td>wareki</td><td>和暦</td><td>影響なし</td></tr>
@@ -356,6 +368,9 @@
 <script>
 // ===== 集計ロジック =====
 const CITY_TAGS = ['st','kb','ks','yh','fo','hs','kt','sp'];
+// オファー金額タグ（例：1650円オファー）。今後別の価格帯オファーが増えたらここに追加する。
+const OFFER_TAGS = ['1650'];
+const OFFER_NAMES = {'1650':'1650円オファー'};
 const CITY_NAMES = {st:'さいたま',kb:'神戸',ks:'川崎',yh:'横浜',fo:'福岡',hs:'広島',kt:'京都',sp:'札幌'};
 const TARGET_LABEL = {brd:'brd', age:'年齢セグ', city:'市区切り', other:'その他'};
 
@@ -470,7 +485,8 @@ function classify(name){
   const yoko = tokens.includes('yoko');
   const month = tokens.find(t=>/^\d+m$/.test(t)) || null;
   const city = tokens.find(t=>CITY_TAGS.includes(t)) || null;
-  const hasPureNum = tokens.some(t=>/^\d+$/.test(t));
+  const offer = tokens.find(t=>OFFER_TAGS.includes(t)) || null;
+  const hasPureNum = tokens.some(t=>/^\d+$/.test(t) && !OFFER_TAGS.includes(t));
 
   let target;
   if(hasBrd && (!age || yoko)) target = 'brd';
@@ -478,7 +494,7 @@ function classify(name){
   else if(month || city || hasPureNum) target = 'city';
   else target = 'other';
 
-  return { seriesNum, vNum, series, sub, target, age, yoko, month, city };
+  return { seriesNum, vNum, series, sub, target, age, yoko, month, city, offer };
 }
 
 function aggregate(records){
@@ -556,6 +572,7 @@ function tokenInfo(t){
   if(/^(18-24|25-34|35-44|45-54)$/.test(t)) return {cls:'tk-tgt', mean:`年齢セグメント ${t}`};
   if((m = t.match(/^(\d+)m$/)))          return {cls:'tk-tgt', mean:`${m[1]}月限定`};
   if(CITY_NAMES[t])                      return {cls:'tk-tgt', mean:`都市：${CITY_NAMES[t]}`};
+  if(OFFER_NAMES[t])                     return {cls:'tk-offer', mean:OFFER_NAMES[t]};
   if(/^\d+$/.test(t))                    return {cls:'tk-tgt', mean:`市区切り番号 ${t}`};
   if(t === 'yoko')                       return {cls:'tk-yoko', mean:'横動画'};
   if(t === 'new')                        return {cls:'', mean:'再入稿（影響なし）'};
@@ -769,15 +786,31 @@ function buildCustomTable(){
 }
 
 // ===== 実行 =====
+function isOfferCP(name){
+  const idx = name.indexOf('mktag');
+  const part = idx >= 0 ? name.slice(idx + 5) : name;
+  return part.split('_').filter(Boolean).some(t => OFFER_TAGS.includes(t));
+}
+
 function run(){
   refreshUserTags();
   const map = parseRenameMap(document.getElementById('renameInput').value);
-  const { records: recs, usedFallback, warnings } = parseData(document.getElementById('dataInput').value, map);
+  const { records: allRecs, usedFallback, warnings } = parseData(document.getElementById('dataInput').value, map);
   const status = document.getElementById('status');
   status.style.display = 'block';
 
-  if(!recs.length){
+  const filterOn = document.getElementById('offerFilter').checked;
+  const recs = filterOn ? allRecs.filter(isOfferCP) : allRecs;
+  const excludedCount = allRecs.length - recs.length;
+
+  if(!allRecs.length){
     status.innerHTML = '<div class="warn-box">キャンペーン行を認識できませんでした。ダッシュボードの一覧（キャンペーン名と数値行）をそのまま貼り付けてください。</div>';
+    document.getElementById('result').style.display = 'none';
+    document.getElementById('nav').style.display = 'none';
+    return;
+  }
+  if(!recs.length){
+    status.innerHTML = '<div class="warn-box">「1650」を含むCPが見つかりませんでした。CP名の表記をご確認いただくか、上のチェックを外して全件集計してください。</div>';
     document.getElementById('result').style.display = 'none';
     document.getElementById('nav').style.display = 'none';
     return;
@@ -790,81 +823,10 @@ function run(){
 
   let html = `<div class="status-ok">
     <span>読み込み <b>${recs.length}</b> 件</span>
+    ${filterOn ? `<span>対象外除外 <b>${excludedCount}</b> 件</span>` : ''}
     <span>消化金額 <b>${yen(agg.t1Total.spend)}</b></span>
     <span>売上 <b>${yen(agg.t1Total.sales)}</b></span>
     <span>CV <b>${Math.round(agg.t1Total.cv)}</b></span>
     ${map.length ? `<span>リネーム <b>${map.length}</b> ルール適用</span>` : ''}
   </div>`;
-  if(usedFallback){
-    html += `<div class="warn-box">貼り付けデータに見出し行（消化金額・MCV・CV・売上・利益）が見つからなかったため、既定の列順で読み取りました。
-      画面幅や列設定によって表示列が変わる環境では数値がズレる場合があるため、コピーする際は<b>見出し行を含めて</b>貼り付けることをおすすめします。</div>`;
-  }
-  if(warnings.length){
-    html += `<div class="warn-box">${warnings.map(w=>esc(w)).join('<br>')}</div>`;
-  }
-  if(agg.others.length){
-    html += `<div class="warn-box">分類できないキャンペーンが ${agg.others.length} 件あります（「その他」として集計）：
-      ${agg.others.map(n=>`<span>${esc(n)}</span>`).join('')}</div>`;
-  }
-  status.innerHTML = html;
-  render(agg);
-}
-
-document.getElementById('runBtn').addEventListener('click', run);
-document.getElementById('addCustomBtn').addEventListener('click', buildCustomTable);
-document.getElementById('axisSelect').addEventListener('change', e=>{
-  document.getElementById('ruleWrap').style.display = e.target.value === 'rules' ? 'block' : 'none';
-});
-document.getElementById('ruleWrap').style.display = 'block';
-document.getElementById('dictInput').addEventListener('input', refreshUserTags);
-
-// CP名解析ツール
-document.getElementById('analyzeInput').addEventListener('input', e=>{
-  refreshUserTags();
-  const name = e.target.value.trim();
-  const out = document.getElementById('analyzeOut');
-  if(!name){ out.innerHTML = ''; return; }
-  if(!/NST\d/.test(name)){
-    out.innerHTML = '<span class="hint">NSTシリーズを含むCP名を入力してください。</span>';
-    return;
-  }
-  const { c, badges } = explainName(name);
-  out.innerHTML = `
-    <div class="name-cell" style="margin-bottom:8px;overflow-x:auto">${highlightName(name)}</div>
-    <div>
-      <span class="badge"><b class="tk-nst">${c.sub}</b><span class="m">① ${c.series} ／ ③ ${c.sub} として集計</span></span>
-      <span class="badge"><b class="tk-tgt">${TARGET_LABEL[c.target]}${c.target==='age' ? `（${c.age}）` : ''}</b><span class="m">② の振り分け先</span></span>
-      <span class="badge"><b class="${c.yoko ? 'tk-yoko' : ''}">${c.yoko ? '横動画' : '縦動画'}</b><span class="m">④ の振り分け先</span></span>
-    </div>
-    <div style="margin-top:6px">${badges.join('') || '<span class="hint">既知タグは検出されませんでした。</span>'}</div>`;
-});
-
-// ===== 設定のURL保存・復元 =====
-document.getElementById('saveBtn').addEventListener('click', ()=>{
-  try{
-    const payload = {
-      r: document.getElementById('renameInput').value,
-      d: document.getElementById('dictInput').value,
-      u: document.getElementById('rulesInput').value,
-    };
-    location.hash = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
-    document.getElementById('saveMsg').textContent = '保存しました。このURLをブックマーク／共有すると設定ごと開けます。';
-  }catch(e){
-    document.getElementById('saveMsg').textContent = 'この環境ではURL保存を利用できません。';
-  }
-});
-(function restore(){
-  try{
-    if(!location.hash || location.hash.length < 2) return;
-    const p = JSON.parse(decodeURIComponent(escape(atob(location.hash.slice(1)))));
-    if(p.r) document.getElementById('renameInput').value = p.r;
-    if(p.d) document.getElementById('dictInput').value = p.d;
-    if(p.u) document.getElementById('rulesInput').value = p.u;
-    refreshUserTags();
-    if(p.r || p.d) document.getElementById('settings').open = true;
-  }catch(e){ /* 破損したハッシュは無視 */ }
-})();
-refreshUserTags();
-</script>
-</body>
-</html>
+  if(usedFallbac
