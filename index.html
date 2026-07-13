@@ -247,7 +247,7 @@
 <main>
   <!-- データ入力 -->
   <div class="card">
-    <div class="card-title"><span class="chip gray">▶</span><h3>運用データ貼り付け</h3><span class="note">「合計」行は自動スキップ／抽出列：消化金額・MCV・CV・売上・利益</span></div>
+    <div class="card-title"><span class="chip gray">▶</span><h3>運用データ貼り付け</h3><span class="note">「合計」行は自動スキップ／抽出列：消化金額・MCV・CV・売上・利益・CPC</span></div>
     <textarea id="dataInput" placeholder="ダッシュボードの一覧をそのままコピーして貼り付けてください（キャンペーン名と ¥ で始まる数値行を自動認識します）"></textarea>
     <div class="offer-filter-group">
       <div class="offer-filter-title">オファーで絞り込む(未選択なら全CPを集計、選んだオファーだけ集計)</div>
@@ -447,11 +447,18 @@ function parseData(text, renameMap){
   const isNameLine = l =>
     /NST\d*/.test(l) && l.includes('_') && !l.includes('\t') && !l.startsWith('¥') && !l.startsWith('合計');
 
-  const maxIdx = Math.max(...REQUIRED_COLS.map(c => colMap[c]));
-  const metricsFromFields = f => ({
-    spend: parseNum(f[colMap['消化金額']]), mcv: parseNum(f[colMap['MCV']]), cv: parseNum(f[colMap['CV']]),
-    sales: parseNum(f[colMap['売上']]), profit: parseNum(f[colMap['利益']]),
-  });
+  const idxCandidates = REQUIRED_COLS.map(c => colMap[c]);
+  if(colMap['CPC'] != null) idxCandidates.push(colMap['CPC']);
+  const maxIdx = Math.max(...idxCandidates);
+  const metricsFromFields = f => {
+    const spend = parseNum(f[colMap['消化金額']]);
+    const cpc = colMap['CPC'] != null ? parseNum(f[colMap['CPC']]) : 0;
+    return {
+      spend, mcv: parseNum(f[colMap['MCV']]), cv: parseNum(f[colMap['CV']]),
+      sales: parseNum(f[colMap['売上']]), profit: parseNum(f[colMap['利益']]),
+      clicks: cpc > 0 ? spend / cpc : 0,
+    };
+  };
 
   for(const line of lines){
     if(!line || line.startsWith('合計')) continue;
@@ -512,8 +519,8 @@ function classify(name){
 
 function aggregate(records){
   const rows = records.map(r=>({ ...r, ...classify(r.name) }));
-  const zero = ()=>({spend:0,mcv:0,cv:0,sales:0,profit:0,count:0});
-  const add = (a,r)=>{a.spend+=r.spend;a.mcv+=r.mcv;a.cv+=r.cv;a.sales+=r.sales;a.profit+=r.profit;a.count+=1;};
+  const zero = ()=>({spend:0,mcv:0,cv:0,sales:0,profit:0,clicks:0,count:0});
+  const add = (a,r)=>{a.spend+=r.spend;a.mcv+=r.mcv;a.cv+=r.cv;a.sales+=r.sales;a.profit+=r.profit;a.clicks+=(r.clicks||0);a.count+=1;};
   const groupBy = (list,keyFn)=>{
     const m = new Map();
     for(const r of list){ const k=keyFn(r); if(!m.has(k)) m.set(k,zero()); add(m.get(k),r); }
@@ -638,10 +645,11 @@ function metricCells(t, withCount){
     `${roasCell(t)}${profitCell(t)}` +
     `<td>${Math.round(t.cv)}</td>` +
     `<td>${t.cv > 0 ? yen(t.spend / t.cv) : '-'}</td>` +
+    `<td>${t.clicks > 0 ? yen(t.spend / t.clicks) : '-'}</td>` +
     (withCount ? `<td>${t.count}</td>` : '');
 }
 function tableHead(keyLabel, withCount){
-  return `<tr><th>${keyLabel}</th><th>消化金額</th><th>売上</th><th>MCPA</th><th>ROAS</th><th>利益</th><th>CV</th><th>CPA</th>${withCount?'<th>CP数</th>':''}</tr>`;
+  return `<tr><th>${keyLabel}</th><th>消化金額</th><th>売上</th><th>MCPA</th><th>ROAS</th><th>利益</th><th>CV</th><th>CPA</th><th>CPC</th>${withCount?'<th>CP数</th>':''}</tr>`;
 }
 function tableCard(id, num, title, bodyHtml, keyLabel, withCount, theme){
   return `<section class="card ${theme || ''}" id="${id}">
@@ -742,8 +750,8 @@ function buildCustomTable(){
   if(!LAST_AGG) return;
   const axis = document.getElementById('axisSelect').value;
   const rows = LAST_AGG.rows;
-  const zero = ()=>({spend:0,mcv:0,cv:0,sales:0,profit:0,count:0});
-  const add = (a,r)=>{a.spend+=r.spend;a.mcv+=r.mcv;a.cv+=r.cv;a.sales+=r.sales;a.profit+=r.profit;a.count+=1;};
+  const zero = ()=>({spend:0,mcv:0,cv:0,sales:0,profit:0,clicks:0,count:0});
+  const add = (a,r)=>{a.spend+=r.spend;a.mcv+=r.mcv;a.cv+=r.cv;a.sales+=r.sales;a.profit+=r.profit;a.clicks+=(r.clicks||0);a.count+=1;};
 
   let entries, defaultTitle, keyLabel;
   if(axis === 'rules'){
