@@ -800,7 +800,7 @@ function run(){
   status.style.display = 'block';
 
   const filterOn = document.getElementById('offerFilter').checked;
-  const recs = filterOn ? allRecs.filter(isOfferCP) : allRecs;
+  const recs = filterOn ? allRecs.filter(r => isOfferCP(r.name)) : allRecs;
   const excludedCount = allRecs.length - recs.length;
 
   if(!allRecs.length){
@@ -829,4 +829,76 @@ function run(){
     <span>CV <b>${Math.round(agg.t1Total.cv)}</b></span>
     ${map.length ? `<span>リネーム <b>${map.length}</b> ルール適用</span>` : ''}
   </div>`;
-  if(usedFallbac
+  if(usedFallback){
+    html += `<div class="warn-box">貼り付けデータに見出し行（消化金額・MCV・CV・売上・利益）が見つからなかったため、既定の列順で読み取りました。
+      画面幅や列設定によって表示列が変わる環境では数値がズレる場合があるため、コピーする際は<b>見出し行を含めて</b>貼り付けることをおすすめします。</div>`;
+  }
+  if(warnings.length){
+    html += `<div class="warn-box">${warnings.map(w=>esc(w)).join('<br>')}</div>`;
+  }
+  if(agg.others.length){
+    html += `<div class="warn-box">分類できないキャンペーンが ${agg.others.length} 件あります（「その他」として集計）：
+      ${agg.others.map(n=>`<span>${esc(n)}</span>`).join('')}</div>`;
+  }
+  status.innerHTML = html;
+  render(agg);
+}
+
+document.getElementById('runBtn').addEventListener('click', run);
+document.getElementById('addCustomBtn').addEventListener('click', buildCustomTable);
+document.getElementById('axisSelect').addEventListener('change', e=>{
+  document.getElementById('ruleWrap').style.display = e.target.value === 'rules' ? 'block' : 'none';
+});
+document.getElementById('ruleWrap').style.display = 'block';
+document.getElementById('dictInput').addEventListener('input', refreshUserTags);
+
+// CP名解析ツール
+document.getElementById('analyzeInput').addEventListener('input', e=>{
+  refreshUserTags();
+  const name = e.target.value.trim();
+  const out = document.getElementById('analyzeOut');
+  if(!name){ out.innerHTML = ''; return; }
+  if(!/NST\d/.test(name)){
+    out.innerHTML = '<span class="hint">NSTシリーズを含むCP名を入力してください。</span>';
+    return;
+  }
+  const { c, badges } = explainName(name);
+  out.innerHTML = `
+    <div class="name-cell" style="margin-bottom:8px;overflow-x:auto">${highlightName(name)}</div>
+    <div>
+      <span class="badge"><b class="tk-nst">${c.sub}</b><span class="m">① ${c.series} ／ ③ ${c.sub} として集計</span></span>
+      <span class="badge"><b class="tk-tgt">${TARGET_LABEL[c.target]}${c.target==='age' ? `（${c.age}）` : ''}</b><span class="m">② の振り分け先</span></span>
+      <span class="badge"><b class="${c.yoko ? 'tk-yoko' : ''}">${c.yoko ? '横動画' : '縦動画'}</b><span class="m">④ の振り分け先</span></span>
+    </div>
+    <div style="margin-top:6px">${badges.join('') || '<span class="hint">既知タグは検出されませんでした。</span>'}</div>`;
+});
+
+// ===== 設定のURL保存・復元 =====
+document.getElementById('saveBtn').addEventListener('click', ()=>{
+  try{
+    const payload = {
+      r: document.getElementById('renameInput').value,
+      d: document.getElementById('dictInput').value,
+      u: document.getElementById('rulesInput').value,
+    };
+    location.hash = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+    document.getElementById('saveMsg').textContent = '保存しました。このURLをブックマーク／共有すると設定ごと開けます。';
+  }catch(e){
+    document.getElementById('saveMsg').textContent = 'この環境ではURL保存を利用できません。';
+  }
+});
+(function restore(){
+  try{
+    if(!location.hash || location.hash.length < 2) return;
+    const p = JSON.parse(decodeURIComponent(escape(atob(location.hash.slice(1)))));
+    if(p.r) document.getElementById('renameInput').value = p.r;
+    if(p.d) document.getElementById('dictInput').value = p.d;
+    if(p.u) document.getElementById('rulesInput').value = p.u;
+    refreshUserTags();
+    if(p.r || p.d) document.getElementById('settings').open = true;
+  }catch(e){ /* 破損したハッシュは無視 */ }
+})();
+refreshUserTags();
+</script>
+</body>
+</html>
