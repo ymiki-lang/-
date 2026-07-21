@@ -146,6 +146,7 @@
   .tk-tgt{color:var(--good);font-weight:700}
   .tk-yoko{color:#C07000;font-weight:700}
   .tk-offer{color:#DB2777;font-weight:700}
+  .tk-proj{color:#0D9488;font-weight:700}
   .tk-usr{color:var(--usr);font-weight:700}
   .tk-mkr{color:#9AA6B5;font-style:italic}
   /* ===== ステータス ===== */
@@ -250,6 +251,10 @@
     <div class="card-title"><span class="chip gray">▶</span><h3>運用データ貼り付け</h3><span class="note">「合計」行は自動スキップ／抽出列：消化金額・MCV・CV・売上・利益・CPC</span></div>
     <textarea id="dataInput" placeholder="ダッシュボードの一覧をそのままコピーして貼り付けてください（キャンペーン名と ¥ で始まる数値行を自動認識します）"></textarea>
     <div class="offer-filter-group">
+      <div class="offer-filter-title">案件で絞り込む(未選択なら全案件を集計、選んだ案件だけ集計／集計すると自動で候補が表示されます)</div>
+      <div class="offer-filter-options" id="projectFilterOptions"><span class="hint">まだ集計していません。「集計する」を押すと検出された案件が表示されます。</span></div>
+    </div>
+    <div class="offer-filter-group">
       <div class="offer-filter-title">オファーで絞り込む(未選択なら全CPを集計、選んだオファーだけ集計)</div>
       <div class="offer-filter-options" id="offerFilterOptions"></div>
     </div>
@@ -262,9 +267,12 @@
 
   <!-- 設定 -->
   <details class="fold" id="settings">
-    <summary>設定 <span class="sub2">— リネームマップ／タグ辞書（意味の追加登録）</span></summary>
+    <summary>設定 <span class="sub2">— シリーズ prefix／リネームマップ／タグ辞書（意味の追加登録）</span></summary>
     <div class="fold-body">
-      <div class="set-grid">
+      <h4>シリーズ prefix（NST以外のシリーズを追加）</h4>
+      <input type="text" id="seriesPrefixInput" value="NST, MKY, IZM">
+      <p class="hint">カンマ区切りで登録。ここに登録した文字列＋数字（例：MKY12、IZM3v2）を①〜⑥・カスタム分析すべてでシリーズとして認識します。</p>
+      <div class="set-grid" style="margin-top:18px">
         <div>
           <h4>リネームマップ</h4>
           <textarea id="renameInput" placeholder="1行につき1件。例：&#10;NST1v2_brd_7m → NST1v3_brd_101&#10;NST10v5_brd_7m → NST10v5_brd"></textarea>
@@ -286,12 +294,13 @@
 
       <h4>CP名の構造（例）</h4>
       <div class="struct">
-        <span class="part tk-pre">三木_728_YT_NST_メンズクリア</span>_<span class="part tk-mkr">mktag</span>_<span class="part tk-pre">mc_YT</span>_<span class="part tk-nst">NST10v5</span>_<span class="part tk-tgt">brd</span>_<span class="part tk-tgt">7m</span>
+        <span class="part tk-pre">三木_728_YT_NST_</span><span class="part tk-proj">メンズクリア</span>_<span class="part tk-mkr">mktag</span>_<span class="part tk-pre">mc_YT</span>_<span class="part tk-nst">NST10v5</span>_<span class="part tk-tgt">brd</span>_<span class="part tk-tgt">7m</span>
       </div>
       <div class="legend">
-        <span><i style="background:#9AA6B5"></i>管理用プレフィックス（担当者・番号・媒体・案件。集計では使わない）</span>
+        <span><i style="background:#9AA6B5"></i>管理用プレフィックス（担当者・番号・媒体。集計では使わない）</span>
+        <span><i style="background:#0D9488"></i>案件名（mktag直前のトークン。①で「案件で絞り込む」に使用）</span>
         <span><i style="background:#C9D2DE"></i>mktag = 区切りマーカー（これ以降を解析対象にする）</span>
-        <span><i style="background:#2E5BE6"></i>NST10v5 = シリーズ10・バージョン5（①は数字のみで大括り、③はv単位）</span>
+        <span><i style="background:#2E5BE6"></i>NST10v5 = シリーズ10・バージョン5（NST以外にMKY・IZMなども設定で登録可。①は数字のみで大括り、③はv単位）</span>
         <span><i style="background:#1D9E75"></i>ターゲティング系タグ（brd / 年齢 / 市区切り）</span>
         <span><i style="background:#C07000"></i>yoko = 横動画（なければ縦動画）</span>
         <span><i style="background:#DB2777"></i>オファー金額タグ（例：1650、7m。対象フィルタ用）</span>
@@ -349,14 +358,15 @@
         <label for="axisSelect">集計軸</label>
         <select id="axisSelect">
           <option value="rules">キーワードルール（自分で定義）</option>
-          <option value="series">NSTシリーズ</option>
-          <option value="sub">NSTサブシリーズ（v単位）</option>
+          <option value="series">シリーズ</option>
+          <option value="sub">サブシリーズ（v単位）</option>
           <option value="target">ターゲティング</option>
           <option value="video">縦動画 / 横動画</option>
           <option value="age">年齢セグメント</option>
           <option value="month">月タグ</option>
           <option value="city">都市タグ</option>
           <option value="offer">オファー</option>
+          <option value="project">案件</option>
         </select>
       </div>
       <div id="ruleWrap">
@@ -377,6 +387,30 @@
 <script>
 // ===== 集計ロジック =====
 const CITY_TAGS = ['st','kb','ks','yh','fo','hs','kt','sp'];
+// シリーズの識別子（NST以外にMKY・IZMなどを追加可能。設定欄で編集できる）
+let SERIES_PREFIXES = ['NST','MKY','IZM'];
+function escapeRegExp(s){ return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+function seriesAltPattern(){
+  const list = SERIES_PREFIXES.map(p=>p.trim()).filter(Boolean).map(escapeRegExp);
+  return (list.length ? list : ['NST']).join('|');
+}
+function findSeriesMatch(text){
+  return text.match(new RegExp(`(${seriesAltPattern()})(\\d+)(?:v(\\d+))?`));
+}
+function hasSeriesToken(s){
+  return new RegExp(`(?:${seriesAltPattern()})\\d`).test(s);
+}
+function seriesSortKey(label){
+  const m = findSeriesMatch(label);
+  return m ? [m[1], parseInt(m[2],10), m[3]!=null?parseInt(m[3],10):-1] : ['~', 1e9, 1e9];
+}
+function parseSeriesPrefixes(text){
+  return (text||'').split(/[\n,、]/).map(s=>s.trim()).filter(Boolean);
+}
+function refreshSeriesPrefixes(){
+  const parsed = parseSeriesPrefixes(document.getElementById('seriesPrefixInput').value);
+  SERIES_PREFIXES = parsed.length ? parsed : ['NST','MKY','IZM'];
+}
 // オファー金額タグ（例：1650円オファー）。今後別の価格帯オファーが増えたらここに追加する。
 // オファー金額タグ一覧。今後別のオファーが増えたらここに追加すれば①〜⑥・フィルタ・カスタム分析すべてに反映される。
 const OFFER_TAGS = ['1650', '7m'];
@@ -445,7 +479,7 @@ function parseData(text, renameMap){
   }
 
   const isNameLine = l =>
-    /NST\d*/.test(l) && l.includes('_') && !l.includes('\t') && !l.startsWith('¥') && !l.startsWith('合計');
+    SERIES_PREFIXES.some(p=>l.includes(p)) && l.includes('_') && !l.includes('\t') && !l.startsWith('¥') && !l.startsWith('合計');
 
   const idxCandidates = REQUIRED_COLS.map(c => colMap[c]);
   if(colMap['CPC'] != null) idxCandidates.push(colMap['CPC']);
@@ -465,7 +499,7 @@ function parseData(text, renameMap){
 
     if(line.includes('\t')){
       const fields = line.split('\t').map(s=>s.trim());
-      if(/NST\d/.test(fields[0]) && fields[0].includes('_') && fields.length > maxIdx + 1){
+      if(hasSeriesToken(fields[0]) && fields[0].includes('_') && fields.length > maxIdx + 1){
         records.push({ name: applyRenames(fields[0].replace(/⎘/g,'').trim(), renameMap), ...metricsFromFields(fields.slice(1)) });
         current = null;
         continue;
@@ -487,17 +521,27 @@ function parseData(text, renameMap){
   return { records, usedFallback, warnings: [...new Set(warnings)] };
 }
 
+function extractProject(name, idx){
+  if(idx < 0) return null;
+  const pre = name.slice(0, idx);
+  const preTrimmed = pre.endsWith('_') ? pre.slice(0, -1) : pre;
+  const tokens = preTrimmed.split('_').filter(Boolean);
+  return tokens.length ? tokens[tokens.length - 1] : null;
+}
+
 function classify(name){
   const idx = name.indexOf('mktag');
   const part = idx >= 0 ? name.slice(idx + 5) : name;
 
-  let m = part.match(/YT_NST(\d+)(?:v(\d+))?/) || part.match(/NST(\d+)(?:v(\d+))?/);
-  if(!m && idx >= 0) m = name.match(/NST(\d+)(?:v(\d+))?/);
+  let m = findSeriesMatch(part);
+  if(!m && idx >= 0) m = findSeriesMatch(name);
 
-  const seriesNum = m ? parseInt(m[1],10) : null;
-  const vNum = m && m[2] != null ? parseInt(m[2],10) : null;
-  const series = seriesNum != null ? 'NST'+seriesNum : '不明';
-  const sub = seriesNum != null ? 'NST'+seriesNum+(vNum!=null?'v'+vNum:'') : '不明';
+  const seriesPrefix = m ? m[1] : null;
+  const seriesNum = m ? parseInt(m[2],10) : null;
+  const vNum = m && m[3] != null ? parseInt(m[3],10) : null;
+  const series = seriesNum != null ? seriesPrefix+seriesNum : '不明';
+  const sub = seriesNum != null ? seriesPrefix+seriesNum+(vNum!=null?'v'+vNum:'') : '不明';
+  const project = extractProject(name, idx);
 
   const tokens = part.split('_').filter(Boolean);
   const hasBrd = tokens.includes('brd');
@@ -514,7 +558,7 @@ function classify(name){
   else if(month || city || hasPureNum) target = 'city';
   else target = 'other';
 
-  return { seriesNum, vNum, series, sub, target, age, yoko, month, city, offer };
+  return { seriesPrefix, seriesNum, vNum, series, sub, target, age, yoko, month, city, offer, project };
 }
 
 function aggregate(records){
@@ -529,7 +573,10 @@ function aggregate(records){
   const total = list=>{const t=zero(); list.forEach(r=>add(t,r)); return t;};
 
   const t1 = [...groupBy(rows,r=>r.series).entries()]
-    .sort((a,b)=>(parseInt(a[0].replace('NST',''))||1e9)-(parseInt(b[0].replace('NST',''))||1e9));
+    .sort((a,b)=>{
+      const x=seriesSortKey(a[0]), y=seriesSortKey(b[0]);
+      return x[0]!==y[0] ? (x[0]<y[0]?-1:1) : x[1]-y[1];
+    });
 
   const brdRows = rows.filter(r=>r.target==='brd');
   const ageRows = rows.filter(r=>r.target==='age');
@@ -541,10 +588,12 @@ function aggregate(records){
   const subGroup = list=>{
     const m = groupBy(list,r=>r.sub);
     for(const [k,v] of m){
-      const mm = k.match(/NST(\d+)(?:v(\d+))?/);
-      v._k = mm ? [parseInt(mm[1]), mm[2]!=null?parseInt(mm[2]):-1] : [1e9,1e9];
+      v._k = seriesSortKey(k);
     }
-    return [...m.entries()].sort((a,b)=>a[1]._k[0]-b[1]._k[0] || a[1]._k[1]-b[1]._k[1]);
+    return [...m.entries()].sort((a,b)=>{
+      const x=a[1]._k, y=b[1]._k;
+      return x[0]!==y[0] ? (x[0]<y[0]?-1:1) : (x[1]-y[1] || x[2]-y[2]);
+    });
   };
 
   return {
@@ -586,8 +635,12 @@ function refreshUserTags(){
 function tokenInfo(t){
   if(USER_DICT.has(t)) return {cls:'tk-usr', mean:USER_DICT.get(t)};
   let m;
-  if((m = t.match(/^NST(\d+)v(\d+)$/))) return {cls:'tk-nst', mean:`シリーズ${m[1]}・バージョン${m[2]}`};
-  if((m = t.match(/^NST(\d+)$/)))       return {cls:'tk-nst', mean:`シリーズ${m[1]}（vなし）`};
+  const seriesTokenRe = new RegExp(`^(${seriesAltPattern()})(\\d+)(?:v(\\d+))?$`);
+  if((m = t.match(seriesTokenRe))){
+    return m[3] != null
+      ? {cls:'tk-nst', mean:`${m[1]}シリーズ${m[2]}・バージョン${m[3]}`}
+      : {cls:'tk-nst', mean:`${m[1]}シリーズ${m[2]}（vなし）`};
+  }
   if(t === 'brd')                        return {cls:'tk-tgt', mean:'ブロード配信'};
   if(/^(18-24|25-34|35-44|45-54)$/.test(t)) return {cls:'tk-tgt', mean:`年齢セグメント ${t}`};
   if(OFFER_NAMES[t] && /^\d+m$/.test(t))  return {cls:'tk-offer', mean:`${OFFER_NAMES[t]}（月限定タグ兼用）`};
@@ -612,7 +665,15 @@ function highlightName(name){
     return `<span class="${info && info.cls ? info.cls : ''}">${esc(t)}</span>`;
   }).join('_');
   if(idx < 0) return paint(name);
-  return `<span class="tk-pre">${esc(name.slice(0,idx))}</span><span class="tk-mkr">mktag</span>${paint(name.slice(idx+5))}`;
+  const pre = name.slice(0, idx);
+  const preTrimmed = pre.endsWith('_') ? pre.slice(0, -1) : pre;
+  const preTokens = preTrimmed.split('_');
+  const preHtml = preTokens.map((t,i) =>
+    i === preTokens.length - 1
+      ? `<span class="tk-proj">${esc(t)}</span>`
+      : `<span class="tk-pre">${esc(t)}</span>`
+  ).join('_');
+  return `${preHtml}${pre.endsWith('_') ? '_' : ''}<span class="tk-mkr">mktag</span>${paint(name.slice(idx+5))}`;
 }
 
 function explainName(name){
@@ -689,6 +750,7 @@ function render(agg){
 
   const b6 = agg.rows.map(r=>`<tr>
       <td class="name-cell">${highlightName(r.name)}</td>
+      <td style="text-align:left;font-weight:400">${r.project || '不明'}</td>
       <td style="text-align:left;font-weight:400">${r.series}</td>
       <td style="text-align:left;font-weight:400">${r.sub}</td>
       <td style="text-align:left;font-weight:400">${TARGET_LABEL[r.target]}${r.target==='age' ? `（${r.age}）` : ''}</td>
@@ -697,19 +759,19 @@ function render(agg){
   const t6Html = `<section class="card th-rose" id="t6">
     <div class="card-title"><span class="chip">⑥</span><h3>CP名解析一覧（命名規則の内訳）</h3></div>
     <div class="tbl-scroll"><table class="data"><thead><tr>
-      <th>キャンペーン名（リネーム後・mktag以降を色分け）</th><th style="text-align:left">シリーズ</th><th style="text-align:left">サブシリーズ</th><th style="text-align:left">ターゲティング</th><th style="text-align:left">動画</th>
+      <th>キャンペーン名（リネーム後・mktag以降を色分け）</th><th style="text-align:left">案件</th><th style="text-align:left">シリーズ</th><th style="text-align:left">サブシリーズ</th><th style="text-align:left">ターゲティング</th><th style="text-align:left">動画</th>
     </tr></thead><tbody>${b6}</tbody></table></div>
     <p class="hint" style="margin-top:10px">
-      色の意味：<span class="tk-nst">NSTシリーズ</span> ／ <span class="tk-tgt">ターゲティング系タグ（brd・年齢・月・都市・数字）</span> ／ <span class="tk-yoko">yoko（横動画）</span> ／ <span class="tk-usr">ユーザー登録タグ</span> ／ <span class="tk-pre">グレー = 管理用プレフィックス（集計に不使用）</span>
+      色の意味：<span class="tk-proj">案件名</span> ／ <span class="tk-nst">シリーズ（NST・MKYなど）</span> ／ <span class="tk-tgt">ターゲティング系タグ（brd・年齢・月・都市・数字）</span> ／ <span class="tk-yoko">yoko（横動画）</span> ／ <span class="tk-offer">オファータグ</span> ／ <span class="tk-usr">ユーザー登録タグ</span> ／ <span class="tk-pre">グレー = 管理用プレフィックス（集計に不使用）</span>
     </p>
   </section>`;
 
   document.getElementById('result').innerHTML =
-    tableCard('t1','①','NSTシリーズ別', b1, 'シリーズ', false, 'th-blue') +
+    tableCard('t1','①','シリーズ別', b1, 'シリーズ', false, 'th-blue') +
     tableCard('t2','②','ターゲティング別（brd / 年齢セグ / 市区切り）', b2 || null, 'セグメント', false, 'th-green') +
-    tableCard('t3','③','NSTサブシリーズ別（v単位）', b3 || null, 'サブシリーズ', false, 'th-purple') +
+    tableCard('t3','③','サブシリーズ別（v単位）', b3 || null, 'サブシリーズ', false, 'th-purple') +
     tableCard('t4','④','縦動画 vs 横動画', b4, '動画タイプ', true, 'th-orange') +
-    tableCard('t5','⑤','市区切り × NSTサブシリーズ別', b5, 'サブシリーズ', false, 'th-teal') +
+    tableCard('t5','⑤','市区切り × サブシリーズ別', b5, 'サブシリーズ', false, 'th-teal') +
     t6Html;
   document.getElementById('result').style.display = 'block';
   document.getElementById('nav').style.display = 'block';
@@ -718,14 +780,15 @@ function render(agg){
 
 // ===== カスタム分析 =====
 const AXES = {
-  series:{label:'NSTシリーズ', key:r=>r.series, sort:'nst'},
-  sub:{label:'NSTサブシリーズ', key:r=>r.sub, sort:'nst'},
+  series:{label:'シリーズ', key:r=>r.series, sort:'nst'},
+  sub:{label:'サブシリーズ', key:r=>r.sub, sort:'nst'},
   target:{label:'ターゲティング', key:r=>TARGET_LABEL[r.target], sort:'spend'},
   video:{label:'縦横', key:r=>r.yoko?'横動画':'縦動画', sort:'spend'},
   age:{label:'年齢セグメント', key:r=>r.age||'年齢指定なし', sort:'label'},
   month:{label:'月タグ', key:r=>r.month ? r.month.replace('m','月') : '月タグなし', sort:'label'},
   city:{label:'都市タグ', key:r=>r.city ? CITY_NAMES[r.city] : '都市タグなし', sort:'spend'},
   offer:{label:'オファー', key:r=>r.offer ? OFFER_NAMES[r.offer] : '対象外', sort:'spend'},
+  project:{label:'案件', key:r=>r.project || '不明', sort:'label'},
 };
 
 function parseRules(text){
@@ -742,8 +805,7 @@ function parseRules(text){
 }
 
 function nstSortKey(k){
-  const m = k.match(/NST(\d+)(?:v(\d+))?/);
-  return m ? [parseInt(m[1]), m[2]!=null?parseInt(m[2]):-1] : [1e9,1e9];
+  return seriesSortKey(k);
 }
 
 function buildCustomTable(){
@@ -775,7 +837,10 @@ function buildCustomTable(){
       add(m.get(k), r);
     }
     entries = [...m.entries()];
-    if(ax.sort === 'nst') entries.sort((a,b)=>{const x=nstSortKey(a[0]),y=nstSortKey(b[0]);return x[0]-y[0]||x[1]-y[1];});
+    if(ax.sort === 'nst') entries.sort((a,b)=>{
+      const x=nstSortKey(a[0]),y=nstSortKey(b[0]);
+      return x[0]!==y[0] ? (x[0]<y[0]?-1:1) : (x[1]-y[1] || x[2]-y[2]);
+    });
     else if(ax.sort === 'label') entries.sort((a,b)=>a[0].localeCompare(b[0],'ja'));
     else entries.sort((a,b)=>b[1].spend-a[1].spend);
     defaultTitle = ax.label + '別'; keyLabel = ax.label;
@@ -811,15 +876,11 @@ function buildCustomTable(){
 // ===== 実行 =====
 function run(){
   refreshUserTags();
+  refreshSeriesPrefixes();
   const map = parseRenameMap(document.getElementById('renameInput').value);
   const { records: allRecs, usedFallback, warnings } = parseData(document.getElementById('dataInput').value, map);
   const status = document.getElementById('status');
   status.style.display = 'block';
-
-  const checkedOffers = [...document.querySelectorAll('.offerTagChk:checked')].map(el => el.value);
-  const filterOn = checkedOffers.length > 0;
-  const recs = filterOn ? allRecs.filter(r => checkedOffers.includes(classify(r.name).offer)) : allRecs;
-  const excludedCount = allRecs.length - recs.length;
 
   if(!allRecs.length){
     status.innerHTML = '<div class="warn-box">キャンペーン行を認識できませんでした。ダッシュボードの一覧（キャンペーン名と数値行）をそのまま貼り付けてください。</div>';
@@ -827,8 +888,25 @@ function run(){
     document.getElementById('nav').style.display = 'none';
     return;
   }
+
+  // 案件（プロジェクト）チェックボックスをパース結果から自動生成・同期
+  syncProjectCheckboxes(allRecs);
+
+  const checkedProjects = [...document.querySelectorAll('.projectChk:checked')].map(el => el.value);
+  const projectFilterOn = checkedProjects.length > 0;
+  const checkedOffers = [...document.querySelectorAll('.offerTagChk:checked')].map(el => el.value);
+  const offerFilterOn = checkedOffers.length > 0;
+
+  let recs = allRecs;
+  if(projectFilterOn) recs = recs.filter(r => checkedProjects.includes(classify(r.name).project));
+  if(offerFilterOn) recs = recs.filter(r => checkedOffers.includes(classify(r.name).offer));
+  const excludedCount = allRecs.length - recs.length;
+
   if(!recs.length){
-    status.innerHTML = `<div class="warn-box">選択したオファー（${checkedOffers.map(t=>OFFER_NAMES[t]).join('／')}）を含むCPが見つかりませんでした。CP名の表記をご確認いただくか、チェックを外して全件集計してください。</div>`;
+    const parts = [];
+    if(projectFilterOn) parts.push(`案件（${checkedProjects.join('／')}）`);
+    if(offerFilterOn) parts.push(`オファー（${checkedOffers.map(t=>OFFER_NAMES[t]).join('／')}）`);
+    status.innerHTML = `<div class="warn-box">選択した${parts.join('・')}に該当するCPが見つかりませんでした。CP名の表記をご確認いただくか、チェックを外して集計してください。</div>`;
     document.getElementById('result').style.display = 'none';
     document.getElementById('nav').style.display = 'none';
     return;
@@ -839,9 +917,13 @@ function run(){
   document.getElementById('customTables').innerHTML = '';
   customCount = 0;
 
+  const filterLabelParts = [];
+  if(projectFilterOn) filterLabelParts.push(`案件: ${checkedProjects.join('／')}`);
+  if(offerFilterOn) filterLabelParts.push(`オファー: ${checkedOffers.map(t=>OFFER_NAMES[t]).join('／')}`);
+
   let html = `<div class="status-ok">
     <span>読み込み <b>${recs.length}</b> 件</span>
-    ${filterOn ? `<span>絞り込み中 <b>${checkedOffers.map(t=>OFFER_NAMES[t]).join('／')}</b>（対象外 ${excludedCount} 件を除外）</span>` : '<span>フィルタなし（全CP集計）</span>'}
+    ${filterLabelParts.length ? `<span>絞り込み中 <b>${filterLabelParts.join(' ／ ')}</b>（対象外 ${excludedCount} 件を除外）</span>` : '<span>フィルタなし（全案件・全CP集計）</span>'}
     <span>消化金額 <b>${yen(agg.t1Total.spend)}</b></span>
     <span>売上 <b>${yen(agg.t1Total.sales)}</b></span>
     <span>CV <b>${Math.round(agg.t1Total.cv)}</b></span>
@@ -873,17 +955,19 @@ document.getElementById('dictInput').addEventListener('input', refreshUserTags);
 // CP名解析ツール
 document.getElementById('analyzeInput').addEventListener('input', e=>{
   refreshUserTags();
+  refreshSeriesPrefixes();
   const name = e.target.value.trim();
   const out = document.getElementById('analyzeOut');
   if(!name){ out.innerHTML = ''; return; }
-  if(!/NST\d/.test(name)){
-    out.innerHTML = '<span class="hint">NSTシリーズを含むCP名を入力してください。</span>';
+  if(!hasSeriesToken(name)){
+    out.innerHTML = `<span class="hint">${esc(SERIES_PREFIXES.join('／'))}のいずれかのシリーズを含むCP名を入力してください。</span>`;
     return;
   }
   const { c, badges } = explainName(name);
   out.innerHTML = `
     <div class="name-cell" style="margin-bottom:8px;overflow-x:auto">${highlightName(name)}</div>
     <div>
+      <span class="badge"><b class="tk-proj">${c.project ? esc(c.project) : '不明'}</b><span class="m">案件</span></span>
       <span class="badge"><b class="tk-nst">${c.sub}</b><span class="m">① ${c.series} ／ ③ ${c.sub} として集計</span></span>
       <span class="badge"><b class="tk-tgt">${TARGET_LABEL[c.target]}${c.target==='age' ? `（${c.age}）` : ''}</b><span class="m">② の振り分け先</span></span>
       <span class="badge"><b class="${c.yoko ? 'tk-yoko' : ''}">${c.yoko ? '横動画' : '縦動画'}</b><span class="m">④ の振り分け先</span></span>
@@ -898,6 +982,7 @@ document.getElementById('saveBtn').addEventListener('click', ()=>{
       r: document.getElementById('renameInput').value,
       d: document.getElementById('dictInput').value,
       u: document.getElementById('rulesInput').value,
+      s: document.getElementById('seriesPrefixInput').value,
     };
     location.hash = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
     document.getElementById('saveMsg').textContent = '保存しました。このURLをブックマーク／共有すると設定ごと開けます。';
@@ -912,11 +997,14 @@ document.getElementById('saveBtn').addEventListener('click', ()=>{
     if(p.r) document.getElementById('renameInput').value = p.r;
     if(p.d) document.getElementById('dictInput').value = p.d;
     if(p.u) document.getElementById('rulesInput').value = p.u;
+    if(p.s) document.getElementById('seriesPrefixInput').value = p.s;
     refreshUserTags();
-    if(p.r || p.d) document.getElementById('settings').open = true;
+    refreshSeriesPrefixes();
+    if(p.r || p.d || p.s) document.getElementById('settings').open = true;
   }catch(e){ /* 破損したハッシュは無視 */ }
 })();
 refreshUserTags();
+refreshSeriesPrefixes();
 
 // 登録済みオファーごとのチェックボックスを自動生成
 (function buildOfferCheckboxes(){
@@ -927,6 +1015,25 @@ refreshUserTags();
       ${esc(OFFER_NAMES[tag])}
     </label>`).join('');
 })();
+
+// 貼り付けデータから案件（プロジェクト）名を検出し、チェックボックスを同期する
+// （既存のチェック状態は維持し、新しく見つかった案件だけ追加する）
+function syncProjectCheckboxes(allRecs){
+  const projects = [...new Set(allRecs.map(r => classify(r.name).project).filter(Boolean))]
+    .sort((a,b)=>a.localeCompare(b,'ja'));
+  const wrap = document.getElementById('projectFilterOptions');
+  const prevChecked = new Set([...wrap.querySelectorAll('.projectChk:checked')].map(el=>el.value));
+  if(!projects.length){
+    wrap.innerHTML = '<span class="hint">案件名を検出できませんでした（CP名の構造をご確認ください）。</span>';
+    return projects;
+  }
+  wrap.innerHTML = projects.map(p => `
+    <label class="offer-chip">
+      <input type="checkbox" class="projectChk" value="${esc(p)}" ${prevChecked.has(p) ? 'checked' : ''}>
+      ${esc(p)}
+    </label>`).join('');
+  return projects;
+}
 </script>
 </body>
 </html>
