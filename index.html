@@ -556,7 +556,7 @@ function classify(name){
   if(hasBrd && (!age || yoko)) target = 'brd';
   else if(age) target = 'age';
   else if(month || city || hasPureNum) target = 'city';
-  else target = 'other';
+  else target = 'brd'; // ターゲティングタグが一切ない場合はbrd扱い（ユーザー指定）
 
   return { seriesPrefix, seriesNum, vNum, series, sub, target, age, yoko, month, city, offer, project };
 }
