@@ -147,6 +147,7 @@
   .tk-yoko{color:#C07000;font-weight:700}
   .tk-offer{color:#DB2777;font-weight:700}
   .tk-proj{color:#0D9488;font-weight:700}
+  .tk-ver{color:#8A97A8;font-style:italic}
   .tk-usr{color:var(--usr);font-weight:700}
   .tk-mkr{color:#9AA6B5;font-style:italic}
   /* ===== ステータス ===== */
@@ -303,7 +304,8 @@
         <span><i style="background:#2E5BE6"></i>NST10v5 = シリーズ10・バージョン5（NST以外にMKY・IZMなども設定で登録可。①は数字のみで大括り、③はv単位）</span>
         <span><i style="background:#1D9E75"></i>ターゲティング系タグ（brd / 年齢 / 市区切り）</span>
         <span><i style="background:#C07000"></i>yoko = 横動画（なければ縦動画）</span>
-        <span><i style="background:#DB2777"></i>オファー金額タグ（例：1650、7m。対象フィルタ用）</span>
+        <span><i style="background:#DB2777"></i>オファー金額タグ（例：1650、980、1980、7m。対象フィルタ用）</span>
+        <span><i style="background:#8A97A8"></i>【...】= クリエイティブ管理タグ（案件名の判定では無視される）</span>
         <span><i style="background:#7C3AED"></i>ユーザー登録タグ（タグ辞書）</span>
       </div>
 
@@ -319,6 +321,8 @@
           <tr><td>1 / 2 / 101 など（数字のみ）</td><td>市区切り番号</td><td>② 市区切りグループ（後ろに _new が付いても同様）</td></tr>
           <tr><td>yoko</td><td>横動画</td><td>④ 横動画（タグなし = 縦動画）</td></tr>
           <tr><td>1650</td><td>1650円オファー</td><td>データ入力欄の「オファーで絞り込む」でチェックすると、このタグを含むCPだけを集計</td></tr>
+          <tr><td>980</td><td>980円オファー（月額）</td><td>データ入力欄の「オファーで絞り込む」でチェックすると、このタグを含むCPだけを集計</td></tr>
+          <tr><td>1980</td><td>1980円オファー（3回）</td><td>データ入力欄の「オファーで絞り込む」でチェックすると、このタグを含むCPだけを集計</td></tr>
           <tr><td>new</td><td>再入稿</td><td>影響なし</td></tr>
           <tr><td>nare / os / ng</td><td>特殊タグ</td><td>影響なし（除外もしない）</td></tr>
           <tr><td>wareki</td><td>和暦</td><td>影響なし</td></tr>
@@ -413,10 +417,12 @@ function refreshSeriesPrefixes(){
 }
 // オファー金額タグ（例：1650円オファー）。今後別の価格帯オファーが増えたらここに追加する。
 // オファー金額タグ一覧。今後別のオファーが増えたらここに追加すれば①〜⑥・フィルタ・カスタム分析すべてに反映される。
-const OFFER_TAGS = ['1650', '7m'];
+const OFFER_TAGS = ['1650', '7m', '980', '1980'];
 const OFFER_NAMES = {
   '1650': '1650円オファー',
   '7m': '9900円オファー（7月限定）',
+  '980': '980円オファー（月額）',
+  '1980': '1980円オファー（3回）',
 };
 const CITY_NAMES = {st:'さいたま',kb:'神戸',ks:'川崎',yh:'横浜',fo:'福岡',hs:'広島',kt:'京都',sp:'札幌'};
 const TARGET_LABEL = {brd:'brd', age:'年齢セグ', city:'市区切り', other:'その他'};
@@ -521,12 +527,26 @@ function parseData(text, renameMap){
   return { records, usedFallback, warnings: [...new Set(warnings)] };
 }
 
+// 【...】のような区切りをまとめて1トークンとして扱いつつ、それ以外は _ で分割する
+function splitPreTokens(pre){
+  const parts = [];
+  const re = /(【[^】]*】)|([^_]+)/g;
+  let m;
+  while((m = re.exec(pre))){
+    parts.push({ text: m[0], isBracket: !!m[1] });
+  }
+  return parts;
+}
+
 function extractProject(name, idx){
   if(idx < 0) return null;
   const pre = name.slice(0, idx);
   const preTrimmed = pre.endsWith('_') ? pre.slice(0, -1) : pre;
-  const tokens = preTrimmed.split('_').filter(Boolean);
-  return tokens.length ? tokens[tokens.length - 1] : null;
+  const parts = splitPreTokens(preTrimmed);
+  for(let i = parts.length - 1; i >= 0; i--){
+    if(!parts[i].isBracket) return parts[i].text;
+  }
+  return null;
 }
 
 function classify(name){
@@ -667,12 +687,13 @@ function highlightName(name){
   if(idx < 0) return paint(name);
   const pre = name.slice(0, idx);
   const preTrimmed = pre.endsWith('_') ? pre.slice(0, -1) : pre;
-  const preTokens = preTrimmed.split('_');
-  const preHtml = preTokens.map((t,i) =>
-    i === preTokens.length - 1
-      ? `<span class="tk-proj">${esc(t)}</span>`
-      : `<span class="tk-pre">${esc(t)}</span>`
-  ).join('_');
+  const parts = splitPreTokens(preTrimmed);
+  let lastNonBracket = -1;
+  for(let i = parts.length - 1; i >= 0; i--){ if(!parts[i].isBracket){ lastNonBracket = i; break; } }
+  const preHtml = parts.map((p,i) => {
+    const cls = p.isBracket ? 'tk-ver' : (i === lastNonBracket ? 'tk-proj' : 'tk-pre');
+    return `<span class="${cls}">${esc(p.text)}</span>`;
+  }).join('_');
   return `${preHtml}${pre.endsWith('_') ? '_' : ''}<span class="tk-mkr">mktag</span>${paint(name.slice(idx+5))}`;
 }
 
