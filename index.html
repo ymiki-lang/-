@@ -271,7 +271,7 @@
     <summary>設定 <span class="sub2">— シリーズ prefix／リネームマップ／タグ辞書（意味の追加登録）</span></summary>
     <div class="fold-body">
       <h4>シリーズ prefix（NST以外のシリーズを追加）</h4>
-      <input type="text" id="seriesPrefixInput" value="NST, MKY, IZM">
+      <input type="text" id="seriesPrefixInput" value="FJK, HMD, HRK, IRS, IZM, KMT, KYS, MHU, MKY, MMM, NST, OBM, OSS, SWH, WDA, YMF">
       <p class="hint">カンマ区切りで登録。ここに登録した文字列＋数字（例：MKY12、IZM3v2）を①〜⑥・カスタム分析すべてでシリーズとして認識します。</p>
       <div class="set-grid" style="margin-top:18px">
         <div>
@@ -392,7 +392,7 @@
 // ===== 集計ロジック =====
 const CITY_TAGS = ['st','kb','ks','yh','fo','hs','kt','sp'];
 // シリーズの識別子（NST以外にMKY・IZMなどを追加可能。設定欄で編集できる）
-let SERIES_PREFIXES = ['NST','MKY','IZM'];
+let SERIES_PREFIXES = ['FJK','HMD','HRK','IRS','IZM','KMT','KYS','MHU','MKY','MMM','NST','OBM','OSS','SWH','WDA','YMF'];
 function escapeRegExp(s){ return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 function seriesAltPattern(){
   const list = SERIES_PREFIXES.map(p=>p.trim()).filter(Boolean).map(escapeRegExp);
@@ -413,7 +413,7 @@ function parseSeriesPrefixes(text){
 }
 function refreshSeriesPrefixes(){
   const parsed = parseSeriesPrefixes(document.getElementById('seriesPrefixInput').value);
-  SERIES_PREFIXES = parsed.length ? parsed : ['NST','MKY','IZM'];
+  SERIES_PREFIXES = parsed.length ? parsed : ['FJK','HMD','HRK','IRS','IZM','KMT','KYS','MHU','MKY','MMM','NST','OBM','OSS','SWH','WDA','YMF'];
 }
 // オファー金額タグ（例：1650円オファー）。今後別の価格帯オファーが増えたらここに追加する。
 // オファー金額タグ一覧。今後別のオファーが増えたらここに追加すれば①〜⑥・フィルタ・カスタム分析すべてに反映される。
@@ -485,7 +485,7 @@ function parseData(text, renameMap){
   }
 
   const isNameLine = l =>
-    SERIES_PREFIXES.some(p=>l.includes(p)) && l.includes('_') && !l.includes('\t') && !l.startsWith('¥') && !l.startsWith('合計');
+    l.includes('mktag') && l.includes('_') && !l.includes('\t') && !l.startsWith('¥') && !l.startsWith('合計');
 
   const idxCandidates = REQUIRED_COLS.map(c => colMap[c]);
   if(colMap['CPC'] != null) idxCandidates.push(colMap['CPC']);
@@ -505,7 +505,7 @@ function parseData(text, renameMap){
 
     if(line.includes('\t')){
       const fields = line.split('\t').map(s=>s.trim());
-      if(hasSeriesToken(fields[0]) && fields[0].includes('_') && fields.length > maxIdx + 1){
+      if(fields[0].includes('mktag') && fields[0].includes('_') && fields.length > maxIdx + 1){
         records.push({ name: applyRenames(fields[0].replace(/⎘/g,'').trim(), renameMap), ...metricsFromFields(fields.slice(1)) });
         current = null;
         continue;
