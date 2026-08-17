@@ -147,6 +147,7 @@
   .tk-yoko{color:#C07000;font-weight:700}
   .tk-offer{color:#DB2777;font-weight:700}
   .tk-proj{color:#0D9488;font-weight:700}
+  .tk-media{color:#4F46E5;font-weight:700}
   .tk-ver{color:#8A97A8;font-style:italic}
   .tk-usr{color:var(--usr);font-weight:700}
   .tk-mkr{color:#9AA6B5;font-style:italic}
@@ -252,12 +253,16 @@
     <div class="card-title"><span class="chip gray">▶</span><h3>運用データ貼り付け</h3><span class="note">「合計」行は自動スキップ／抽出列：消化金額・MCV・CV・売上・利益・CPC</span></div>
     <textarea id="dataInput" placeholder="ダッシュボードの一覧をそのままコピーして貼り付けてください（キャンペーン名と ¥ で始まる数値行を自動認識します）"></textarea>
     <div class="offer-filter-group">
+      <div class="offer-filter-title">媒体で絞り込む(未選択なら全媒体を集計、選んだ媒体だけ集計／集計すると自動で候補が表示されます)</div>
+      <div class="offer-filter-options" id="mediaFilterOptions"><span class="hint">まだ集計していません。「集計する」を押すと検出された媒体が表示されます。</span></div>
+    </div>
+    <div class="offer-filter-group">
       <div class="offer-filter-title">案件で絞り込む(未選択なら全案件を集計、選んだ案件だけ集計／集計すると自動で候補が表示されます)</div>
       <div class="offer-filter-options" id="projectFilterOptions"><span class="hint">まだ集計していません。「集計する」を押すと検出された案件が表示されます。</span></div>
     </div>
     <div class="offer-filter-group">
-      <div class="offer-filter-title">オファーで絞り込む(未選択なら全CPを集計、選んだオファーだけ集計)</div>
-      <div class="offer-filter-options" id="offerFilterOptions"></div>
+      <div class="offer-filter-title">オファーで絞り込む(未選択なら全CPを集計、選んだオファーだけ集計／集計すると自動で候補が表示されます)</div>
+      <div class="offer-filter-options" id="offerFilterOptions"><span class="hint">まだ集計していません。「集計する」を押すと検出されたオファーが表示されます。</span></div>
     </div>
     <div class="run-row">
       <button class="btn" id="runBtn">集計する</button>
@@ -295,11 +300,12 @@
 
       <h4>CP名の構造（例）</h4>
       <div class="struct">
-        <span class="part tk-pre">三木_728_YT_NST_</span><span class="part tk-proj">メンズクリア</span>_<span class="part tk-mkr">mktag</span>_<span class="part tk-pre">mc_YT</span>_<span class="part tk-nst">NST10v5</span>_<span class="part tk-tgt">brd</span>_<span class="part tk-tgt">7m</span>
+        <span class="part tk-pre">三木_728_</span><span class="part tk-media">YT</span><span class="part tk-pre">_NST_</span><span class="part tk-proj">メンズクリア</span>_<span class="part tk-mkr">mktag</span>_<span class="part tk-pre">mc_YT</span>_<span class="part tk-nst">NST10v5</span>_<span class="part tk-tgt">brd</span>_<span class="part tk-tgt">7m</span>
       </div>
       <div class="legend">
-        <span><i style="background:#9AA6B5"></i>管理用プレフィックス（担当者・番号・媒体。集計では使わない）</span>
-        <span><i style="background:#0D9488"></i>案件名（mktag直前のトークン。①で「案件で絞り込む」に使用）</span>
+        <span><i style="background:#9AA6B5"></i>管理用プレフィックス（担当者・番号。集計では使わない）</span>
+        <span><i style="background:#4F46E5"></i>媒体（先頭から3番目のワードで判定。①上部の「媒体で絞り込む」に使用）</span>
+        <span><i style="background:#0D9488"></i>案件名（mktag直前のトークン。「案件で絞り込む」に使用）</span>
         <span><i style="background:#C9D2DE"></i>mktag = 区切りマーカー（これ以降を解析対象にする）</span>
         <span><i style="background:#2E5BE6"></i>NST10v5 = シリーズ10・バージョン5（NST以外にMKY・IZMなども設定で登録可。①は数字のみで大括り、③はv単位）</span>
         <span><i style="background:#1D9E75"></i>ターゲティング系タグ（brd / 年齢 / 市区切り）</span>
@@ -309,20 +315,35 @@
         <span><i style="background:#7C3AED"></i>ユーザー登録タグ（タグ辞書）</span>
       </div>
 
+      <h4>媒体の判定ルール（先頭から3番目のワード）</h4>
+      <table class="tags">
+        <thead><tr><th>ワード</th><th>媒体</th></tr></thead>
+        <tbody>
+          <tr><td>D</td><td>Googleデマンド</td></tr>
+          <tr><td>FB</td><td>Facebook</td></tr>
+          <tr><td>GDN</td><td>GDN</td></tr>
+          <tr><td>tiktok / TikTok</td><td>TikTok</td></tr>
+          <tr><td>YT</td><td>YouTube</td></tr>
+          <tr><td>yahoo / YDA</td><td>YDA</td></tr>
+          <tr><td>X</td><td>X</td></tr>
+          <tr><td>SN</td><td>SmartNews</td></tr>
+          <tr><td>LAP</td><td>LINE Ads Platform</td></tr>
+        </tbody>
+      </table>
+      <p class="hint">大文字・小文字は区別しません。一覧にないワードの場合はそのままの文字列を媒体名として表示します。</p>
+
       <h4>タグの意味一覧</h4>
       <table class="tags">
         <thead><tr><th>タグ</th><th>意味</th><th>集計への影響</th></tr></thead>
         <tbody>
           <tr><td>brd</td><td>ブロード配信</td><td>② brdグループ（最優先。ただし年齢タグ併記でyokoなしの場合は年齢が優先）</td></tr>
           <tr><td>18-24 / 25-34 / 35-44 / 45-54</td><td>年齢セグメント</td><td>② 年齢セグメントグループ</td></tr>
-          <tr><td>6m / 8m など</td><td>月限定（6月・8月…）</td><td>② 市区切りグループ判定に使用</td></tr>
-          <tr><td>7m</td><td>7月限定 ＋ 9900円オファー（7月限定）</td><td>② 市区切りグループ判定に使用／「オファーで絞り込む」のチェック対象</td></tr>
+          <tr><td>6m / 8m など</td><td>月限定（6月・8月…）＋ オファー（自動検出）</td><td>② 市区切りグループ判定に使用／「オファーで絞り込む」の候補として自動検出</td></tr>
+          <tr><td>7m</td><td>7月限定 ＋ オファー（自動検出）</td><td>② 市区切りグループ判定に使用／「オファーで絞り込む」の候補として自動検出</td></tr>
           <tr><td>st / kb / ks / yh / fo / hs / kt / sp</td><td>さいたま / 神戸 / 川崎 / 横浜 / 福岡 / 広島 / 京都 / 札幌</td><td>② 市区切りグループ</td></tr>
-          <tr><td>1 / 2 / 101 など（数字のみ）</td><td>市区切り番号</td><td>② 市区切りグループ（後ろに _new が付いても同様）</td></tr>
+          <tr><td>city1 / city2 など（"city"を含む）</td><td>市区切り</td><td>② 市区切りグループ判定に使用</td></tr>
+          <tr><td>980 / 1650 / 1980 など（数字のみ）</td><td>オファー（○○円オファーとして自動検出）</td><td>事前登録なしで「オファーで絞り込む」に候補として自動表示</td></tr>
           <tr><td>yoko</td><td>横動画</td><td>④ 横動画（タグなし = 縦動画）</td></tr>
-          <tr><td>1650</td><td>1650円オファー</td><td>データ入力欄の「オファーで絞り込む」でチェックすると、このタグを含むCPだけを集計</td></tr>
-          <tr><td>980</td><td>980円オファー（月額）</td><td>データ入力欄の「オファーで絞り込む」でチェックすると、このタグを含むCPだけを集計</td></tr>
-          <tr><td>1980</td><td>1980円オファー（3回）</td><td>データ入力欄の「オファーで絞り込む」でチェックすると、このタグを含むCPだけを集計</td></tr>
           <tr><td>new</td><td>再入稿</td><td>影響なし</td></tr>
           <tr><td>nare / os / ng</td><td>特殊タグ</td><td>影響なし（除外もしない）</td></tr>
           <tr><td>wareki</td><td>和暦</td><td>影響なし</td></tr>
@@ -371,6 +392,7 @@
           <option value="city">都市タグ</option>
           <option value="offer">オファー</option>
           <option value="project">案件</option>
+          <option value="media">媒体</option>
         </select>
       </div>
       <div id="ruleWrap">
@@ -415,17 +437,31 @@ function refreshSeriesPrefixes(){
   const parsed = parseSeriesPrefixes(document.getElementById('seriesPrefixInput').value);
   SERIES_PREFIXES = parsed.length ? parsed : ['FJK','HMD','HRK','IRS','IZM','KMT','KYS','MHU','MKY','MMM','NST','OBM','OSS','SWH','WDA','YMF'];
 }
-// オファー金額タグ（例：1650円オファー）。今後別の価格帯オファーが増えたらここに追加する。
-// オファー金額タグ一覧。今後別のオファーが増えたらここに追加すれば①〜⑥・フィルタ・カスタム分析すべてに反映される。
-const OFFER_TAGS = ['1650', '7m', '980', '1980'];
-const OFFER_NAMES = {
-  '1650': '1650円オファー',
-  '7m': '9900円オファー（7月限定）',
-  '980': '980円オファー（月額）',
-  '1980': '1980円オファー（3回）',
-};
 const CITY_NAMES = {st:'さいたま',kb:'神戸',ks:'川崎',yh:'横浜',fo:'福岡',hs:'広島',kt:'京都',sp:'札幌'};
 const TARGET_LABEL = {brd:'brd', age:'年齢セグ', city:'市区切り', other:'その他'};
+
+// 媒体判定：先頭から3番目のワード（アンダースコア区切り）で判定する
+const MEDIA_DEFS = [
+  { label: 'Googleデマンド', keys: ['d'] },
+  { label: 'Facebook', keys: ['fb'] },
+  { label: 'GDN', keys: ['gdn'] },
+  { label: 'TikTok', keys: ['tiktok'] },
+  { label: 'YouTube', keys: ['yt'] },
+  { label: 'YDA', keys: ['yahoo', 'yda'] },
+  { label: 'X', keys: ['x'] },
+  { label: 'SmartNews', keys: ['sn'] },
+  { label: 'LINE Ads Platform', keys: ['lap'] },
+];
+const MEDIA_LOOKUP = {};
+MEDIA_DEFS.forEach(d => d.keys.forEach(k => { MEDIA_LOOKUP[k] = d.label; }));
+
+function extractMedia(name){
+  const tokens = name.split('_');
+  const raw = tokens[2] || null;
+  if(!raw) return { raw: null, label: null };
+  const label = MEDIA_LOOKUP[raw.toLowerCase()] || raw;
+  return { raw, label };
+}
 
 function parseNum(s){
   if(s == null) return 0;
@@ -562,6 +598,7 @@ function classify(name){
   const series = seriesNum != null ? seriesPrefix+seriesNum : '不明';
   const sub = seriesNum != null ? seriesPrefix+seriesNum+(vNum!=null?'v'+vNum:'') : '不明';
   const project = extractProject(name, idx);
+  const mediaInfo = extractMedia(name);
 
   const tokens = part.split('_').filter(Boolean);
   const hasBrd = tokens.includes('brd');
@@ -569,16 +606,21 @@ function classify(name){
   const yoko = tokens.includes('yoko');
   const month = tokens.find(t=>/^\d+m$/.test(t)) || null;
   const city = tokens.find(t=>CITY_TAGS.includes(t)) || null;
-  const offer = tokens.find(t=>OFFER_TAGS.includes(t)) || null;
-  const hasPureNum = tokens.some(t=>/^\d+$/.test(t) && !OFFER_TAGS.includes(t));
+  const cityWord = tokens.find(t=>/city/i.test(t)) || null;
+  // オファーは事前登録なしで自動検出する：数字だけのタグ（例：980, 1650, 1980）は「○○円オファー」、
+  // 「N + m」のタグ（例：7m）は「N月限定オファー」として扱う
+  const offer = tokens.find(t=>/^\d+$/.test(t) || /^\d+m$/.test(t)) || null;
+  const offerLabel = offer
+    ? (/^\d+m$/.test(offer) ? `${offer.replace('m','')}月限定オファー` : `${offer}円オファー`)
+    : null;
 
   let target;
   if(hasBrd && (!age || yoko)) target = 'brd';
   else if(age) target = 'age';
-  else if(month || city || hasPureNum) target = 'city';
+  else if(month || city || cityWord) target = 'city';
   else target = 'brd'; // ターゲティングタグが一切ない場合はbrd扱い（ユーザー指定）
 
-  return { seriesPrefix, seriesNum, vNum, series, sub, target, age, yoko, month, city, offer, project };
+  return { seriesPrefix, seriesNum, vNum, series, sub, target, age, yoko, month, city, offer, offerLabel, project, cityWord, media: mediaInfo.label, mediaRaw: mediaInfo.raw };
 }
 
 function aggregate(records){
@@ -663,11 +705,10 @@ function tokenInfo(t){
   }
   if(t === 'brd')                        return {cls:'tk-tgt', mean:'ブロード配信'};
   if(/^(18-24|25-34|35-44|45-54)$/.test(t)) return {cls:'tk-tgt', mean:`年齢セグメント ${t}`};
-  if(OFFER_NAMES[t] && /^\d+m$/.test(t))  return {cls:'tk-offer', mean:`${OFFER_NAMES[t]}（月限定タグ兼用）`};
-  if(OFFER_NAMES[t])                     return {cls:'tk-offer', mean:OFFER_NAMES[t]};
-  if((m = t.match(/^(\d+)m$/)))          return {cls:'tk-tgt', mean:`${m[1]}月限定`};
+  if((m = t.match(/^(\d+)m$/)))          return {cls:'tk-offer', mean:`${m[1]}月限定オファー（月限定タグ兼用）`};
   if(CITY_NAMES[t])                      return {cls:'tk-tgt', mean:`都市：${CITY_NAMES[t]}`};
-  if(/^\d+$/.test(t))                    return {cls:'tk-tgt', mean:`市区切り番号 ${t}`};
+  if(/city/i.test(t))                    return {cls:'tk-tgt', mean:`市区切り（${t}）`};
+  if(/^\d+$/.test(t))                    return {cls:'tk-offer', mean:`${t}円オファー`};
   if(t === 'yoko')                       return {cls:'tk-yoko', mean:'横動画'};
   if(t === 'new')                        return {cls:'', mean:'再入稿（影響なし）'};
   if(['nare','os','ng'].includes(t))     return {cls:'', mean:'特殊タグ（影響なし）'};
@@ -691,7 +732,11 @@ function highlightName(name){
   let lastNonBracket = -1;
   for(let i = parts.length - 1; i >= 0; i--){ if(!parts[i].isBracket){ lastNonBracket = i; break; } }
   const preHtml = parts.map((p,i) => {
-    const cls = p.isBracket ? 'tk-ver' : (i === lastNonBracket ? 'tk-proj' : 'tk-pre');
+    let cls;
+    if(p.isBracket) cls = 'tk-ver';
+    else if(i === 2) cls = 'tk-media';
+    else if(i === lastNonBracket) cls = 'tk-proj';
+    else cls = 'tk-pre';
     return `<span class="${cls}">${esc(p.text)}</span>`;
   }).join('_');
   return `${preHtml}${pre.endsWith('_') ? '_' : ''}<span class="tk-mkr">mktag</span>${paint(name.slice(idx+5))}`;
@@ -771,6 +816,7 @@ function render(agg){
 
   const b6 = agg.rows.map(r=>`<tr>
       <td class="name-cell">${highlightName(r.name)}</td>
+      <td style="text-align:left;font-weight:400">${r.media || '不明'}</td>
       <td style="text-align:left;font-weight:400">${r.project || '不明'}</td>
       <td style="text-align:left;font-weight:400">${r.series}</td>
       <td style="text-align:left;font-weight:400">${r.sub}</td>
@@ -780,10 +826,10 @@ function render(agg){
   const t6Html = `<section class="card th-rose" id="t6">
     <div class="card-title"><span class="chip">⑥</span><h3>CP名解析一覧（命名規則の内訳）</h3></div>
     <div class="tbl-scroll"><table class="data"><thead><tr>
-      <th>キャンペーン名（リネーム後・mktag以降を色分け）</th><th style="text-align:left">案件</th><th style="text-align:left">シリーズ</th><th style="text-align:left">サブシリーズ</th><th style="text-align:left">ターゲティング</th><th style="text-align:left">動画</th>
+      <th>キャンペーン名（リネーム後・mktag以降を色分け）</th><th style="text-align:left">媒体</th><th style="text-align:left">案件</th><th style="text-align:left">シリーズ</th><th style="text-align:left">サブシリーズ</th><th style="text-align:left">ターゲティング</th><th style="text-align:left">動画</th>
     </tr></thead><tbody>${b6}</tbody></table></div>
     <p class="hint" style="margin-top:10px">
-      色の意味：<span class="tk-proj">案件名</span> ／ <span class="tk-nst">シリーズ（NST・MKYなど）</span> ／ <span class="tk-tgt">ターゲティング系タグ（brd・年齢・月・都市・数字）</span> ／ <span class="tk-yoko">yoko（横動画）</span> ／ <span class="tk-offer">オファータグ</span> ／ <span class="tk-usr">ユーザー登録タグ</span> ／ <span class="tk-pre">グレー = 管理用プレフィックス（集計に不使用）</span>
+      色の意味：<span class="tk-media">媒体</span> ／ <span class="tk-proj">案件名</span> ／ <span class="tk-nst">シリーズ（NST・MKYなど）</span> ／ <span class="tk-tgt">ターゲティング系タグ（brd・年齢・月・都市・数字）</span> ／ <span class="tk-yoko">yoko（横動画）</span> ／ <span class="tk-offer">オファータグ</span> ／ <span class="tk-usr">ユーザー登録タグ</span> ／ <span class="tk-pre">グレー = 管理用プレフィックス（集計に不使用）</span>
     </p>
   </section>`;
 
@@ -808,8 +854,9 @@ const AXES = {
   age:{label:'年齢セグメント', key:r=>r.age||'年齢指定なし', sort:'label'},
   month:{label:'月タグ', key:r=>r.month ? r.month.replace('m','月') : '月タグなし', sort:'label'},
   city:{label:'都市タグ', key:r=>r.city ? CITY_NAMES[r.city] : '都市タグなし', sort:'spend'},
-  offer:{label:'オファー', key:r=>r.offer ? OFFER_NAMES[r.offer] : '対象外', sort:'spend'},
+  offer:{label:'オファー', key:r=>r.offerLabel || '対象外', sort:'spend'},
   project:{label:'案件', key:r=>r.project || '不明', sort:'label'},
+  media:{label:'媒体', key:r=>r.media || '不明', sort:'label'},
 };
 
 function parseRules(text){
@@ -910,23 +957,29 @@ function run(){
     return;
   }
 
-  // 案件（プロジェクト）チェックボックスをパース結果から自動生成・同期
+  // 媒体・案件・オファーのチェックボックスをパース結果から自動生成・同期
+  syncMediaCheckboxes(allRecs);
   syncProjectCheckboxes(allRecs);
+  syncOfferCheckboxes(allRecs);
 
+  const checkedMedia = [...document.querySelectorAll('.mediaChk:checked')].map(el => el.value);
+  const mediaFilterOn = checkedMedia.length > 0;
   const checkedProjects = [...document.querySelectorAll('.projectChk:checked')].map(el => el.value);
   const projectFilterOn = checkedProjects.length > 0;
   const checkedOffers = [...document.querySelectorAll('.offerTagChk:checked')].map(el => el.value);
   const offerFilterOn = checkedOffers.length > 0;
 
   let recs = allRecs;
+  if(mediaFilterOn) recs = recs.filter(r => checkedMedia.includes(classify(r.name).media));
   if(projectFilterOn) recs = recs.filter(r => checkedProjects.includes(classify(r.name).project));
-  if(offerFilterOn) recs = recs.filter(r => checkedOffers.includes(classify(r.name).offer));
+  if(offerFilterOn) recs = recs.filter(r => checkedOffers.includes(classify(r.name).offerLabel));
   const excludedCount = allRecs.length - recs.length;
 
   if(!recs.length){
     const parts = [];
+    if(mediaFilterOn) parts.push(`媒体（${checkedMedia.join('／')}）`);
     if(projectFilterOn) parts.push(`案件（${checkedProjects.join('／')}）`);
-    if(offerFilterOn) parts.push(`オファー（${checkedOffers.map(t=>OFFER_NAMES[t]).join('／')}）`);
+    if(offerFilterOn) parts.push(`オファー（${checkedOffers.join('／')}）`);
     status.innerHTML = `<div class="warn-box">選択した${parts.join('・')}に該当するCPが見つかりませんでした。CP名の表記をご確認いただくか、チェックを外して集計してください。</div>`;
     document.getElementById('result').style.display = 'none';
     document.getElementById('nav').style.display = 'none';
@@ -939,8 +992,9 @@ function run(){
   customCount = 0;
 
   const filterLabelParts = [];
+  if(mediaFilterOn) filterLabelParts.push(`媒体: ${checkedMedia.join('／')}`);
   if(projectFilterOn) filterLabelParts.push(`案件: ${checkedProjects.join('／')}`);
-  if(offerFilterOn) filterLabelParts.push(`オファー: ${checkedOffers.map(t=>OFFER_NAMES[t]).join('／')}`);
+  if(offerFilterOn) filterLabelParts.push(`オファー: ${checkedOffers.join('／')}`);
 
   let html = `<div class="status-ok">
     <span>読み込み <b>${recs.length}</b> 件</span>
@@ -988,6 +1042,7 @@ document.getElementById('analyzeInput').addEventListener('input', e=>{
   out.innerHTML = `
     <div class="name-cell" style="margin-bottom:8px;overflow-x:auto">${highlightName(name)}</div>
     <div>
+      <span class="badge"><b class="tk-media">${c.media ? esc(c.media) : '不明'}</b><span class="m">媒体</span></span>
       <span class="badge"><b class="tk-proj">${c.project ? esc(c.project) : '不明'}</b><span class="m">案件</span></span>
       <span class="badge"><b class="tk-nst">${c.sub}</b><span class="m">① ${c.series} ／ ③ ${c.sub} として集計</span></span>
       <span class="badge"><b class="tk-tgt">${TARGET_LABEL[c.target]}${c.target==='age' ? `（${c.age}）` : ''}</b><span class="m">② の振り分け先</span></span>
@@ -1028,14 +1083,41 @@ refreshUserTags();
 refreshSeriesPrefixes();
 
 // 登録済みオファーごとのチェックボックスを自動生成
-(function buildOfferCheckboxes(){
-  const wrap = document.getElementById('offerFilterOptions');
-  wrap.innerHTML = OFFER_TAGS.map(tag => `
+// 貼り付けデータから媒体を検出し、チェックボックスを同期する
+function syncMediaCheckboxes(allRecs){
+  const mediaSet = [...new Set(allRecs.map(r => classify(r.name).media).filter(Boolean))]
+    .sort((a,b)=>a.localeCompare(b,'ja'));
+  const wrap = document.getElementById('mediaFilterOptions');
+  const prevChecked = new Set([...wrap.querySelectorAll('.mediaChk:checked')].map(el=>el.value));
+  if(!mediaSet.length){
+    wrap.innerHTML = '<span class="hint">媒体を検出できませんでした（CP名の構造をご確認ください）。</span>';
+    return mediaSet;
+  }
+  wrap.innerHTML = mediaSet.map(v => `
     <label class="offer-chip">
-      <input type="checkbox" class="offerTagChk" value="${esc(tag)}">
-      ${esc(OFFER_NAMES[tag])}
+      <input type="checkbox" class="mediaChk" value="${esc(v)}" ${prevChecked.has(v) ? 'checked' : ''}>
+      ${esc(v)}
     </label>`).join('');
-})();
+  return mediaSet;
+}
+
+// 貼り付けデータからオファーを検出し、チェックボックスを同期する（事前登録は不要）
+function syncOfferCheckboxes(allRecs){
+  const offerSet = [...new Set(allRecs.map(r => classify(r.name).offerLabel).filter(Boolean))]
+    .sort((a,b)=>a.localeCompare(b,'ja'));
+  const wrap = document.getElementById('offerFilterOptions');
+  const prevChecked = new Set([...wrap.querySelectorAll('.offerTagChk:checked')].map(el=>el.value));
+  if(!offerSet.length){
+    wrap.innerHTML = '<span class="hint">オファータグを検出できませんでした（数字だけのタグや「N月」形式のタグがあると自動認識します）。</span>';
+    return offerSet;
+  }
+  wrap.innerHTML = offerSet.map(v => `
+    <label class="offer-chip">
+      <input type="checkbox" class="offerTagChk" value="${esc(v)}" ${prevChecked.has(v) ? 'checked' : ''}>
+      ${esc(v)}
+    </label>`).join('');
+  return offerSet;
+}
 
 // 貼り付けデータから案件（プロジェクト）名を検出し、チェックボックスを同期する
 // （既存のチェック状態は維持し、新しく見つかった案件だけ追加する）
