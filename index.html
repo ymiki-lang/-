@@ -261,8 +261,8 @@
       <div class="offer-filter-options" id="projectFilterOptions"><span class="hint">まだ集計していません。「集計する」を押すと検出された案件が表示されます。</span></div>
     </div>
     <div class="offer-filter-group">
-      <div class="offer-filter-title">オファーで絞り込む(未選択なら全CPを集計、選んだオファーだけ集計／集計すると自動で候補が表示されます)</div>
-      <div class="offer-filter-options" id="offerFilterOptions"><span class="hint">まだ集計していません。「集計する」を押すと検出されたオファーが表示されます。</span></div>
+      <div class="offer-filter-title">オファーで絞り込む(未選択なら全CPを集計、選んだオファーだけ集計／案件を選択すると候補が表示されます)</div>
+      <div class="offer-filter-options" id="offerFilterOptions"><span class="hint">案件を選択すると、その案件のオファー候補が表示されます。</span></div>
     </div>
     <div class="run-row">
       <button class="btn" id="runBtn">集計する</button>
@@ -957,10 +957,11 @@ function run(){
     return;
   }
 
-  // 媒体・案件・オファーのチェックボックスをパース結果から自動生成・同期
+  // 媒体・案件のチェックボックスをパース結果から自動生成・同期
   syncMediaCheckboxes(allRecs);
   syncProjectCheckboxes(allRecs);
-  syncOfferCheckboxes(allRecs);
+  // オファーは案件が選択されている場合のみ、その案件に絞って表示する
+  updateOfferOptions(allRecs);
 
   const checkedMedia = [...document.querySelectorAll('.mediaChk:checked')].map(el => el.value);
   const mediaFilterOn = checkedMedia.length > 0;
@@ -1020,6 +1021,28 @@ function run(){
 }
 
 document.getElementById('runBtn').addEventListener('click', run);
+
+// データを貼り付けた時点（集計するボタンを押す前）で媒体・案件・オファーの候補を自動表示する
+let previewTimer = null;
+function updateFilterPreview(){
+  refreshUserTags();
+  refreshSeriesPrefixes();
+  const map = parseRenameMap(document.getElementById('renameInput').value);
+  const { records: allRecs } = parseData(document.getElementById('dataInput').value, map);
+  if(!allRecs.length){
+    document.getElementById('mediaFilterOptions').innerHTML = '<span class="hint">まだ集計していません。「集計する」を押すと検出された媒体が表示されます。</span>';
+    document.getElementById('projectFilterOptions').innerHTML = '<span class="hint">まだ集計していません。「集計する」を押すと検出された案件が表示されます。</span>';
+    document.getElementById('offerFilterOptions').innerHTML = '<span class="hint">案件を選択すると、その案件のオファー候補が表示されます。</span>';
+    return;
+  }
+  syncMediaCheckboxes(allRecs);
+  syncProjectCheckboxes(allRecs);
+  updateOfferOptions(allRecs);
+}
+document.getElementById('dataInput').addEventListener('input', () => {
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(updateFilterPreview, 150);
+});
 document.getElementById('addCustomBtn').addEventListener('click', buildCustomTable);
 document.getElementById('axisSelect').addEventListener('change', e=>{
   document.getElementById('ruleWrap').style.display = e.target.value === 'rules' ? 'block' : 'none';
@@ -1118,6 +1141,29 @@ function syncOfferCheckboxes(allRecs){
     </label>`).join('');
   return offerSet;
 }
+
+// オファーの候補は、案件が選択されるまで表示しない。案件を選ぶと、その案件に含まれる
+// オファーだけに絞り込んで表示する（案件ボタンを押した直後にオファーボタンが現れる）
+function updateOfferOptions(allRecs){
+  const checkedProjects = [...document.querySelectorAll('.projectChk:checked')].map(el => el.value);
+  const wrap = document.getElementById('offerFilterOptions');
+  if(checkedProjects.length === 0){
+    wrap.innerHTML = '<span class="hint">案件を選択すると、その案件のオファー候補が表示されます。</span>';
+    return;
+  }
+  const scoped = allRecs.filter(r => checkedProjects.includes(classify(r.name).project));
+  syncOfferCheckboxes(scoped);
+}
+
+// 案件チェックボックスは動的に再生成されるため、親要素へのイベント委譲で変化を検知する
+document.getElementById('projectFilterOptions').addEventListener('change', (e) => {
+  if(!e.target.classList.contains('projectChk')) return;
+  refreshUserTags();
+  refreshSeriesPrefixes();
+  const map = parseRenameMap(document.getElementById('renameInput').value);
+  const { records: allRecs } = parseData(document.getElementById('dataInput').value, map);
+  updateOfferOptions(allRecs);
+});
 
 // 貼り付けデータから案件（プロジェクト）名を検出し、チェックボックスを同期する
 // （既存のチェック状態は維持し、新しく見つかった案件だけ追加する）
