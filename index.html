@@ -546,13 +546,15 @@ function parseData(text, renameMap){
         current = null;
         continue;
       }
-      if(fields[0].startsWith('¥') && fields.length > maxIdx){
-        if(current){
+      // 数値行の1列目は「¥」表記とは限らない（日予算などが「—」になっている場合がある）ため、
+      // 直前に読み取った名前（current）があるかどうかで数値行を判定する
+      if(current){
+        if(fields.length > maxIdx){
           records.push({ name: current, ...metricsFromFields(fields) });
-          current = null;
-        }else if(fields.length <= maxIdx + 1){
+        }else{
           warnings.push('数値行の列数が想定より少なく、一部の項目を正しく読み取れていない可能性があります。');
         }
+        current = null;
         continue;
       }
     }
