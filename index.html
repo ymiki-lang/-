@@ -342,6 +342,7 @@
           <tr><td>7m</td><td>7月限定 ＋ オファー（自動検出）</td><td>② 市区切りグループ判定に使用／「オファーで絞り込む」の候補として自動検出</td></tr>
           <tr><td>st / kb / ks / yh / fo / hs / kt / sp</td><td>さいたま / 神戸 / 川崎 / 横浜 / 福岡 / 広島 / 京都 / 札幌</td><td>② 市区切りグループ</td></tr>
           <tr><td>city1 / city2 など（"city"を含む）</td><td>市区切り</td><td>② 市区切りグループ判定に使用</td></tr>
+          <tr><td>store1 / store2 など（"store"を含む）</td><td>店舗切り</td><td>② 店舗切りグループ判定に使用</td></tr>
           <tr><td>980 / 1650 / 1980 など（数字のみ）</td><td>オファー（○○円オファーとして自動検出）</td><td>事前登録なしで「オファーで絞り込む」に候補として自動表示</td></tr>
           <tr><td>yoko</td><td>横動画</td><td>④ 横動画（タグなし = 縦動画）</td></tr>
           <tr><td>new</td><td>再入稿</td><td>影響なし</td></tr>
@@ -350,7 +351,7 @@
         </tbody>
         <tbody id="userTagRows"></tbody>
       </table>
-      <p class="hint">振り分けの優先順位：brd → 年齢セグメント → 市区切り → その他（brd + yoko + 年齢 は brd、brd + 年齢のみは年齢セグ）。「設定 → タグ辞書」で登録したタグは<span class="tk-usr">紫色</span>でこの表の末尾に追加されます。</p>
+      <p class="hint">振り分けの優先順位：brd → 年齢セグメント → 市区切り → 店舗切り → brd（該当タグなしの場合）（brd + yoko + 年齢 は brd、brd + 年齢のみは年齢セグ）。「設定 → タグ辞書」で登録したタグは<span class="tk-usr">紫色</span>でこの表の末尾に追加されます。</p>
 
       <h4>CP名解析ツール</h4>
       <div class="analyzer">
@@ -438,7 +439,7 @@ function refreshSeriesPrefixes(){
   SERIES_PREFIXES = parsed.length ? parsed : ['FJK','HMD','HRK','IRS','IZM','KMT','KYS','MHU','MKY','MMM','NST','OBM','OSS','SWH','WDA','YMF'];
 }
 const CITY_NAMES = {st:'さいたま',kb:'神戸',ks:'川崎',yh:'横浜',fo:'福岡',hs:'広島',kt:'京都',sp:'札幌'};
-const TARGET_LABEL = {brd:'brd', age:'年齢セグ', city:'市区切り', other:'その他'};
+const TARGET_LABEL = {brd:'brd', age:'年齢セグ', city:'市区切り', store:'店舗切り', other:'その他'};
 
 // 媒体判定：先頭から3番目のワード（アンダースコア区切り）で判定する
 const MEDIA_DEFS = [
@@ -562,7 +563,11 @@ function parseData(text, renameMap){
       current = applyRenames(line.replace(/⎘/g,'').trim(), renameMap);
     }
   }
-  return { records, usedFallback, warnings: [...new Set(warnings)] };
+  // 消化金額0円・CV0の行（MCVだけ入っているような実態のない行）は集計対象から除外する。
+  // ただし消化金額0円でもCVが1件でもあれば、実際のコンバージョンとして残す。
+  const cleanRecords = records.filter(r => !(r.spend === 0 && r.cv === 0));
+  const phantomExcluded = records.length - cleanRecords.length;
+  return { records: cleanRecords, usedFallback, warnings: [...new Set(warnings)], phantomExcluded };
 }
 
 // 【...】のような区切りをまとめて1トークンとして扱いつつ、それ以外は _ で分割する
@@ -609,6 +614,7 @@ function classify(name){
   const month = tokens.find(t=>/^\d+m$/.test(t)) || null;
   const city = tokens.find(t=>CITY_TAGS.includes(t)) || null;
   const cityWord = tokens.find(t=>/city/i.test(t)) || null;
+  const storeWord = tokens.find(t=>/store/i.test(t)) || null;
   // オファーは事前登録なしで自動検出する：数字だけのタグ（例：980, 1650, 1980）は「○○円オファー」、
   // 「N + m」のタグ（例：7m）は「N月限定オファー」として扱う
   const offer = tokens.find(t=>/^\d+$/.test(t) || /^\d+m$/.test(t)) || null;
@@ -620,9 +626,10 @@ function classify(name){
   if(hasBrd && (!age || yoko)) target = 'brd';
   else if(age) target = 'age';
   else if(month || city || cityWord) target = 'city';
+  else if(storeWord) target = 'store';
   else target = 'brd'; // ターゲティングタグが一切ない場合はbrd扱い（ユーザー指定）
 
-  return { seriesPrefix, seriesNum, vNum, series, sub, target, age, yoko, month, city, offer, offerLabel, project, cityWord, media: mediaInfo.label, mediaRaw: mediaInfo.raw };
+  return { seriesPrefix, seriesNum, vNum, series, sub, target, age, yoko, month, city, offer, offerLabel, project, cityWord, storeWord, media: mediaInfo.label, mediaRaw: mediaInfo.raw };
 }
 
 function aggregate(records){
@@ -645,6 +652,7 @@ function aggregate(records){
   const brdRows = rows.filter(r=>r.target==='brd');
   const ageRows = rows.filter(r=>r.target==='age');
   const cityRows = rows.filter(r=>r.target==='city');
+  const storeRows = rows.filter(r=>r.target==='store');
   const otherRows = rows.filter(r=>r.target==='other');
   const ageOrder = ['18-24','25-34','35-44','45-54'];
   const ageSub = ageOrder.map(a=>[a, total(ageRows.filter(r=>r.age===a))]).filter(([,t])=>t.count>0);
@@ -663,7 +671,7 @@ function aggregate(records){
   return {
     rows,
     t1, t1Total: total(rows),
-    t2:{ brd:total(brdRows), age:total(ageRows), ageSub, city:total(cityRows),
+    t2:{ brd:total(brdRows), age:total(ageRows), ageSub, city:total(cityRows), store:total(storeRows),
          other: otherRows.length ? total(otherRows) : null },
     t3: subGroup(rows),
     t4:{ tate: total(rows.filter(r=>!r.yoko)), yoko: total(rows.filter(r=>r.yoko)) },
@@ -710,6 +718,7 @@ function tokenInfo(t){
   if((m = t.match(/^(\d+)m$/)))          return {cls:'tk-offer', mean:`${m[1]}月限定オファー（月限定タグ兼用）`};
   if(CITY_NAMES[t])                      return {cls:'tk-tgt', mean:`都市：${CITY_NAMES[t]}`};
   if(/city/i.test(t))                    return {cls:'tk-tgt', mean:`市区切り（${t}）`};
+  if(/store/i.test(t))                   return {cls:'tk-tgt', mean:`店舗切り（${t}）`};
   if(/^\d+$/.test(t))                    return {cls:'tk-offer', mean:`${t}円オファー`};
   if(t === 'yoko')                       return {cls:'tk-yoko', mean:'横動画'};
   if(t === 'new')                        return {cls:'', mean:'再入稿（影響なし）'};
@@ -803,6 +812,7 @@ function render(agg){
     b2 += agg.t2.ageSub.map(([a,t])=>`<tr class="subrow"><td>${a}</td>${metricCells(t)}</tr>`).join('');
   }
   if(agg.t2.city.count) b2 += `<tr><td>市区切り 合計</td>${metricCells(agg.t2.city)}</tr>`;
+  if(agg.t2.store.count) b2 += `<tr><td>店舗切り 合計</td>${metricCells(agg.t2.store)}</tr>`;
   if(agg.t2.other) b2 += `<tr><td>その他</td>${metricCells(agg.t2.other)}</tr>`;
 
   const b3 = agg.t3.map(([k,t])=>`<tr><td>${k}</td>${metricCells(t)}</tr>`).join('');
@@ -837,7 +847,7 @@ function render(agg){
 
   document.getElementById('result').innerHTML =
     tableCard('t1','①','シリーズ別', b1, 'シリーズ', false, 'th-blue') +
-    tableCard('t2','②','ターゲティング別（brd / 年齢セグ / 市区切り）', b2 || null, 'セグメント', false, 'th-green') +
+    tableCard('t2','②','ターゲティング別（brd / 年齢セグ / 市区切り / 店舗切り）', b2 || null, 'セグメント', false, 'th-green') +
     tableCard('t3','③','サブシリーズ別（v単位）', b3 || null, 'サブシリーズ', false, 'th-purple') +
     tableCard('t4','④','縦動画 vs 横動画', b4, '動画タイプ', true, 'th-orange') +
     tableCard('t5','⑤','市区切り × サブシリーズ別', b5, 'サブシリーズ', false, 'th-teal') +
@@ -948,7 +958,7 @@ function run(){
   refreshUserTags();
   refreshSeriesPrefixes();
   const map = parseRenameMap(document.getElementById('renameInput').value);
-  const { records: allRecs, usedFallback, warnings } = parseData(document.getElementById('dataInput').value, map);
+  const { records: allRecs, usedFallback, warnings, phantomExcluded } = parseData(document.getElementById('dataInput').value, map);
   const status = document.getElementById('status');
   status.style.display = 'block';
 
@@ -1006,6 +1016,7 @@ function run(){
     <span>売上 <b>${yen(agg.t1Total.sales)}</b></span>
     <span>CV <b>${Math.round(agg.t1Total.cv)}</b></span>
     ${map.length ? `<span>リネーム <b>${map.length}</b> ルール適用</span>` : ''}
+    ${phantomExcluded ? `<span>0円/CVなしの行を <b>${phantomExcluded}</b> 件除外</span>` : ''}
   </div>`;
   if(usedFallback){
     html += `<div class="warn-box">貼り付けデータに見出し行（消化金額・MCV・CV・売上・利益）が見つからなかったため、既定の列順で読み取りました。
