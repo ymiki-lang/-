@@ -625,8 +625,9 @@ function classify(name){
   let target;
   if(hasBrd && (!age || yoko)) target = 'brd';
   else if(age) target = 'age';
-  else if(month || city || cityWord) target = 'city';
+  else if(cityWord) target = 'city';
   else if(storeWord) target = 'store';
+  else if(month || city) target = 'city';
   else target = 'brd'; // ターゲティングタグが一切ない場合はbrd扱い（ユーザー指定）
 
   return { seriesPrefix, seriesNum, vNum, series, sub, target, age, yoko, month, city, offer, offerLabel, project, cityWord, storeWord, media: mediaInfo.label, mediaRaw: mediaInfo.raw };
