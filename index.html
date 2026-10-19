@@ -362,6 +362,42 @@
     </div>
   </details>
 
+  <!-- 日別トレンド分析 -->
+  <div class="card" id="dailyTrendCard">
+    <div class="card-title"><span class="chip" style="background:#4F46E5">📈</span><h3>日別トレンド分析</h3><span class="note">「日別データ」付きCSVを取り込んで、バージョンごとの推移をグラフ比較</span></div>
+    <p class="hint" style="margin-bottom:10px">対応形式：1キャンペーンごとに「概要行 → 日付ヘッダ行 → 日別データ行」が並ぶCSV（例：三木_CR分析シートのCSVエクスポート）。ファイル名末尾が「_YYYYMM」の場合、年月を自動で読み取ります。</p>
+    <input type="file" id="dailyCsvInput" accept=".csv" style="margin-bottom:12px">
+    <div id="dailyTrendStatus"></div>
+    <div id="dailyTrendControls" style="display:none;margin-top:14px">
+      <label style="font-size:12.5px;color:var(--ink-2);font-weight:700;display:block;margin-bottom:6px">シリーズ（複数選択可）</label>
+      <div id="dailySeriesChecks" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px"></div>
+      <div class="builder-row">
+        <div>
+          <label for="dailyMetricSelect">指標</label>
+          <select id="dailyMetricSelect">
+            <option value="spend">消化金額</option>
+            <option value="mcpa">MCPA</option>
+            <option value="cvr">CVR</option>
+            <option value="roas">ROAS</option>
+            <option value="cpa">CPA</option>
+            <option value="cv">CV</option>
+            <option value="sales">売上</option>
+            <option value="profit">利益</option>
+          </select>
+        </div>
+      </div>
+      <label style="font-size:12.5px;color:var(--ink-2);font-weight:700;display:block;margin:14px 0 6px">バージョン（表示のON/OFF）</label>
+      <div id="dailyVersionChecks" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+      <div id="dailyChartWrap" style="margin-top:16px;overflow-x:auto"></div>
+    </div>
+  </div>
+
+  <!-- シリーズ別ROAS比較（横棒グラフ） -->
+  <div class="card" id="dailyRoasBarCard" style="display:none">
+    <div class="card-title"><span class="chip" style="background:#DB2777">📊</span><h3>シリーズ別ROAS比較</h3><span class="note">CSVの全期間を通じたシリーズごとのROASを横棒グラフで比較</span></div>
+    <div id="dailyRoasBarWrap" style="overflow-x:auto"></div>
+  </div>
+
   <div id="status"></div>
 
   <nav id="nav"><div class="nav-inner">
@@ -587,7 +623,7 @@ function extractProject(name, idx){
   const preTrimmed = pre.endsWith('_') ? pre.slice(0, -1) : pre;
   const parts = splitPreTokens(preTrimmed);
   for(let i = parts.length - 1; i >= 0; i--){
-    if(!parts[i].isBracket) return parts[i].text;
+    if(!parts[i].isBracket) return parts[i].text.replace(/🔵/g,'').trim() || null;
   }
   return null;
 }
@@ -1035,6 +1071,344 @@ function run(){
 }
 
 document.getElementById('runBtn').addEventListener('click', run);
+
+// ===== 日別トレンド分析（CSV取り込み） =====
+const DAILY_METRIC_DEFS = {
+  spend: { label:'消化金額', unit:'yen' },
+  mcpa:  { label:'MCPA', unit:'yen' },
+  cvr:   { label:'CVR', unit:'pct' },
+  roas:  { label:'ROAS', unit:'pct' },
+  cpa:   { label:'CPA', unit:'yen' },
+  cv:    { label:'CV', unit:'num' },
+  sales: { label:'売上', unit:'yen' },
+  profit:{ label:'利益', unit:'yen' },
+};
+const DAILY_LINE_COLORS = ['#2E5BE6','#0E9F6E','#7C3AED','#D97706','#0D9488','#DB2777','#DC2626','#4B5563','#0891B2','#65A30D'];
+
+function parseDailyNum(s){
+  if(s == null || s === '') return null;
+  const t = String(s).trim();
+  if(t === '') return null;
+  const v = parseFloat(t.replace(/[¥,%\s]/g,''));
+  return isNaN(v) ? null : v;
+}
+
+// 「概要行 → 日付ヘッダ行 → 日別データ行」が繰り返されるCSV形式を解析する
+function parseDailyCsv(text, yearHint){
+  // 簡易CSVパーサー（ダブルクォート内のカンマ・改行に対応）
+  const rows = [];
+  let field = '', row = [], inQuotes = false;
+  for(let i = 0; i < text.length; i++){
+    const c = text[i];
+    if(inQuotes){
+      if(c === '"'){
+        if(text[i+1] === '"'){ field += '"'; i++; } else inQuotes = false;
+      } else field += c;
+    }else{
+      if(c === '"') inQuotes = true;
+      else if(c === ','){ row.push(field); field=''; }
+      else if(c === '\n' || c === '\r'){
+        if(c === '\r' && text[i+1] === '\n') i++;
+        row.push(field); field=''; rows.push(row); row=[];
+      } else field += c;
+    }
+  }
+  if(field !== '' || row.length) { row.push(field); rows.push(row); }
+
+  const datePat = /^(\d{1,2})\/(\d{1,2})\(/;
+  const records = [];
+  let current = null;
+  const year = yearHint || new Date().getFullYear();
+
+  for(const r of rows){
+    const col1 = (r[1] || '').trim();
+    if(col1.includes('mktag')){
+      current = col1.replace(/⎘/g,'').trim();
+      continue;
+    }
+    if(col1 === '日付') continue;
+    const m = col1.match(datePat);
+    if(m && current){
+      const month = parseInt(m[1],10), day = parseInt(m[2],10);
+      const date = `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+      records.push({
+        name: current,
+        date, dateLabel: col1,
+        spend: parseDailyNum(r[3]) || 0,
+        mcv: parseDailyNum(r[9]) || 0,
+        mcpa: parseDailyNum(r[11]),
+        cv: parseDailyNum(r[12]) || 0,
+        cvr: parseDailyNum(r[13]),
+        sales: parseDailyNum(r[14]) || 0,
+        profit: parseDailyNum(r[15]),
+        roas: parseDailyNum(r[16]),
+        cpa: parseDailyNum(r[17]),
+      });
+    }
+  }
+  return records;
+}
+
+let DAILY_RECORDS = [];
+
+function buildDailySeriesOptions(){
+  const seriesSet = new Map(); // series -> Set(sub)
+  DAILY_RECORDS.forEach(r => {
+    const c = classify(r.name);
+    if(!seriesSet.has(c.series)) seriesSet.set(c.series, new Set());
+    seriesSet.get(c.series).add(c.sub);
+  });
+  const seriesList = [...seriesSet.keys()].sort((a,b)=>{
+    const x = seriesSortKey(a), y = seriesSortKey(b);
+    return x[0]!==y[0] ? (x[0]<y[0]?-1:1) : x[1]-y[1];
+  });
+  const wrap = document.getElementById('dailySeriesChecks');
+  wrap.innerHTML = seriesList.map((s,i) => `
+    <label class="offer-chip">
+      <input type="checkbox" class="dailySeriesChk" value="${esc(s)}" ${i===0 ? 'checked' : ''}>
+      ${esc(s)}（${seriesSet.get(s).size}バージョン）
+    </label>`).join('');
+  return seriesSet;
+}
+
+function renderDailyVersionChecks(){
+  const checkedSeries = [...document.querySelectorAll('.dailySeriesChk:checked')].map(el => el.value);
+  const prevAll = [...document.querySelectorAll('.dailyVerChk')].map(el => el.value);
+  const prevChecked = new Set([...document.querySelectorAll('.dailyVerChk:checked')].map(el => el.value));
+  const subs = [...new Set(DAILY_RECORDS
+    .map(r => classify(r.name))
+    .filter(c => checkedSeries.includes(c.series))
+    .map(c => c.sub))]
+    .sort((a,b)=>{
+      const x = seriesSortKey(a), y = seriesSortKey(b);
+      return x[0]!==y[0] ? (x[0]<y[0]?-1:1) : (x[1]-y[1] || x[2]-y[2]);
+    });
+  const wrap = document.getElementById('dailyVersionChecks');
+  if(!subs.length){
+    wrap.innerHTML = '<span class="hint">シリーズを1つ以上選択してください。</span>';
+    return;
+  }
+  wrap.innerHTML = subs.map((s,i) => {
+    const style = dailyLineStyle(i);
+    // 既に表示したことのあるバージョンはチェック状態を維持し、新しく現れたバージョンは既定でON
+    const checked = prevAll.includes(s) ? prevChecked.has(s) : true;
+    return `<label class="offer-chip" style="border-color:${style.color};border-width:2px">
+      <input type="checkbox" class="dailyVerChk" value="${esc(s)}" ${checked ? 'checked' : ''}>
+      <span style="color:${style.color};font-weight:700">${esc(s)}</span>
+    </label>`;
+  }).join('');
+}
+
+function fmtDailyValue(v, unit){
+  if(v == null) return '-';
+  if(unit === 'yen') return '¥' + Math.round(v).toLocaleString('ja-JP');
+  if(unit === 'pct') return v.toFixed(1) + '%';
+  return String(Math.round(v));
+}
+
+// 色は最大10色循環。10本を超えたら破線パターンも変えて見分けやすくする
+const DAILY_DASH_PATTERNS = [null, '7,4', '2,3'];
+function dailyLineStyle(i){
+  const color = DAILY_LINE_COLORS[i % DAILY_LINE_COLORS.length];
+  const dashIdx = Math.floor(i / DAILY_LINE_COLORS.length) % DAILY_DASH_PATTERNS.length;
+  return { color, dash: DAILY_DASH_PATTERNS[dashIdx] };
+}
+
+// 同じサブシリーズに複数キャンペーン（ターゲティング違いなど）がある場合は合算してから指標を再計算する
+function aggregateDailyBySub(subs){
+  const dateSet = [...new Set(DAILY_RECORDS.map(r=>r.date))].sort();
+  const raw = {};
+  subs.forEach(sub => { raw[sub] = {}; });
+  DAILY_RECORDS.forEach(r => {
+    const c = classify(r.name);
+    if(subs.includes(c.sub)){
+      if(!raw[c.sub][r.date]) raw[c.sub][r.date] = {spend:0,mcv:0,cv:0,sales:0,profit:0};
+      const b = raw[c.sub][r.date];
+      b.spend += r.spend||0; b.mcv += r.mcv||0; b.cv += r.cv||0; b.sales += r.sales||0; b.profit += (r.profit||0);
+    }
+  });
+  return { dateSet, raw };
+}
+function computeDailyMetric(bucket, key){
+  if(!bucket) return null;
+  switch(key){
+    case 'spend': return bucket.spend;
+    case 'cv': return bucket.cv;
+    case 'sales': return bucket.sales;
+    case 'profit': return bucket.profit;
+    case 'mcpa': return bucket.mcv > 0 ? bucket.spend / bucket.mcv : null;
+    case 'cvr': return bucket.mcv > 0 ? bucket.cv / bucket.mcv * 100 : null;
+    case 'roas': return bucket.spend > 0 ? bucket.sales / bucket.spend * 100 : null;
+    case 'cpa': return bucket.cv > 0 ? bucket.spend / bucket.cv : null;
+    default: return null;
+  }
+}
+
+function renderDailyChart(){
+  const metricKey = document.getElementById('dailyMetricSelect').value;
+  const metricDef = DAILY_METRIC_DEFS[metricKey];
+  const checkedSubs = [...document.querySelectorAll('.dailyVerChk:checked')].map(el => el.value);
+  const wrap = document.getElementById('dailyChartWrap');
+  if(!checkedSubs.length){
+    wrap.innerHTML = '<p class="empty">バージョンを1つ以上選択してください。</p>';
+    return;
+  }
+
+  const { dateSet, raw } = aggregateDailyBySub(checkedSubs);
+  const seriesData = {};
+  checkedSubs.forEach(sub => {
+    seriesData[sub] = {};
+    dateSet.forEach(d => { seriesData[sub][d] = computeDailyMetric(raw[sub][d], metricKey); });
+  });
+
+  const H = 400;
+  const padL = 72, padR = 24, padT = 24, padB = 50;
+  // 本数が多いほど横幅を確保して線が詰まりすぎないようにする
+  const W = Math.max(760, dateSet.length * 38);
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+
+  let allVals = [];
+  checkedSubs.forEach(sub => dateSet.forEach(d => {
+    const v = seriesData[sub][d];
+    if(v != null) allVals.push(v);
+  }));
+  if(!allVals.length){ wrap.innerHTML = '<p class="empty">選択した範囲にデータがありません。</p>'; return; }
+  let minV = Math.min(0, ...allVals), maxV = Math.max(...allVals);
+  if(minV === maxV) maxV = minV + 1;
+  const pad10 = (maxV - minV) * 0.08;
+  maxV += pad10;
+  const yFor = v => padT + plotH - ((v - minV) / (maxV - minV)) * plotH;
+  const xFor = i => padL + (dateSet.length > 1 ? (i / (dateSet.length - 1)) * plotW : plotW/2);
+
+  const gridLines = 5;
+  let gridHtml = '';
+  for(let g=0; g<=gridLines; g++){
+    const v = minV + (maxV - minV) * g / gridLines;
+    const y = yFor(v);
+    gridHtml += `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W-padR}" y2="${y.toFixed(1)}" stroke="var(--line-strong)" stroke-width="1" opacity="0.6"/>`;
+    gridHtml += `<text x="${padL-10}" y="${(y+4).toFixed(1)}" font-size="11.5" fill="var(--ink)" font-weight="600" text-anchor="end">${fmtDailyValue(v, metricDef.unit)}</text>`;
+  }
+  let xLabelsHtml = '';
+  const xStep = Math.ceil(dateSet.length / 14) || 1;
+  dateSet.forEach((d,i) => {
+    if(i % xStep === 0 || i === dateSet.length-1){
+      const label = d.slice(5).replace('-','/');
+      xLabelsHtml += `<text x="${xFor(i).toFixed(1)}" y="${H-padB+20}" font-size="11.5" fill="var(--ink)" font-weight="600" text-anchor="middle">${label}</text>`;
+    }
+  });
+
+  let linesHtml = '';
+  let legendHtml = '';
+  checkedSubs.forEach((sub,i) => {
+    const { color, dash } = dailyLineStyle(i);
+    const dashAttr = dash ? ` stroke-dasharray="${dash}"` : '';
+    let pathD = '', started = false;
+    let dotsHtml = '';
+    dateSet.forEach((d,j) => {
+      const v = seriesData[sub][d];
+      if(v == null) { started = false; return; }
+      const x = xFor(j), y = yFor(v);
+      pathD += (started ? ' L ' : ' M ') + x.toFixed(1) + ' ' + y.toFixed(1);
+      started = true;
+      dotsHtml += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="${color}" stroke="var(--panel)" stroke-width="1.5"><title>${esc(sub)} ${d}: ${esc(fmtDailyValue(v, metricDef.unit))}</title></circle>`;
+    });
+    // 白いハロー（縁取り）を先に描いてから色付きの線を重ねることで、線同士の重なりでも視認性を確保する
+    linesHtml += `<path d="${pathD}" fill="none" stroke="var(--panel)" stroke-width="4.5" opacity="0.7"/>`;
+    linesHtml += `<path d="${pathD}" fill="none" stroke="${color}" stroke-width="2.5"${dashAttr}/>${dotsHtml}`;
+    legendHtml += `<span style="display:inline-flex;align-items:center;gap:6px;margin-right:16px;margin-bottom:4px;font-size:12.5px;font-weight:700;color:${color}">
+      <span style="width:20px;height:3px;background:${color};display:inline-block;${dash?`border-top:3px dashed ${color};background:none;`:''}"></span>${esc(sub)}
+    </span>`;
+  });
+
+  wrap.innerHTML = `
+    <div style="margin-bottom:10px;line-height:1.8">${legendHtml}</div>
+    <svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="max-width:100%;display:block">
+      <rect x="${padL}" y="${padT}" width="${plotW}" height="${plotH}" fill="var(--zebra)" opacity="0.4"/>
+      ${gridHtml}${xLabelsHtml}${linesHtml}
+      <text x="${padL}" y="16" font-size="12.5" fill="var(--ink)" font-weight="700">${esc(metricDef.label)}${metricDef.unit==='pct' ? '（%）' : metricDef.unit==='yen' ? '（円）' : ''}</text>
+    </svg>`;
+}
+
+// ===== シリーズ別ROAS比較（横棒グラフ） =====
+function roasBarColor(roas){
+  if(roas >= 150) return '#1D9E75';
+  if(roas >= 100) return '#BA7517';
+  return '#E24B4A';
+}
+function renderDailySeriesRoasBar(){
+  const wrap = document.getElementById('dailyRoasBarWrap');
+  const seriesTotals = new Map(); // series -> {spend, sales}
+  DAILY_RECORDS.forEach(r => {
+    const c = classify(r.name);
+    if(!seriesTotals.has(c.series)) seriesTotals.set(c.series, {spend:0, sales:0});
+    const t = seriesTotals.get(c.series);
+    t.spend += r.spend||0; t.sales += r.sales||0;
+  });
+  const rows = [...seriesTotals.entries()]
+    .map(([series, t]) => ({ series, roas: t.spend > 0 ? t.sales/t.spend*100 : 0, spend: t.spend }))
+    .sort((a,b) => b.roas - a.roas);
+
+  if(!rows.length){ wrap.innerHTML = '<p class="empty">データがありません。</p>'; return; }
+
+  const rowH = 30, padL = 90, padR = 70, padT = 10, padB = 30;
+  const W = 720, H = padT + padB + rows.length * rowH;
+  const plotW = W - padL - padR;
+  const maxRoas = Math.max(100, ...rows.map(r=>r.roas)) * 1.1;
+  const xFor = v => padL + (v / maxRoas) * plotW;
+
+  let barsHtml = '';
+  rows.forEach((r,i) => {
+    const y = padT + i * rowH;
+    const barW = Math.max(2, xFor(r.roas) - padL);
+    const color = roasBarColor(r.roas);
+    barsHtml += `
+      <text x="${padL-10}" y="${y+rowH/2+4}" font-size="12.5" font-weight="700" fill="var(--ink)" text-anchor="end">${esc(r.series)}</text>
+      <rect x="${padL}" y="${y+5}" width="${barW.toFixed(1)}" height="${rowH-10}" rx="4" fill="${color}"><title>${esc(r.series)}: ROAS ${r.roas.toFixed(0)}%（消化金額 ${fmtDailyValue(r.spend,'yen')}）</title></rect>
+      <text x="${(xFor(r.roas)+8).toFixed(1)}" y="${y+rowH/2+4}" font-size="12.5" font-weight="700" fill="${color}">${r.roas.toFixed(0)}%</text>`;
+  });
+  const line100X = xFor(100);
+  const gridHtml = `<line x1="${line100X.toFixed(1)}" y1="${padT}" x2="${line100X.toFixed(1)}" y2="${H-padB}" stroke="var(--line-strong)" stroke-width="1.5" stroke-dasharray="4,3"/>
+    <text x="${line100X.toFixed(1)}" y="${H-padB+18}" font-size="11" fill="var(--ink-2)" text-anchor="middle">100%</text>`;
+
+  wrap.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="max-width:100%;display:block">${gridHtml}${barsHtml}</svg>`;
+}
+
+document.getElementById('dailyCsvInput').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  const statusEl = document.getElementById('dailyTrendStatus');
+  if(!file) return;
+  const m = file.name.match(/(\d{4})(\d{2})(?:\D|$)/);
+  const yearHint = m ? parseInt(m[1],10) : null;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    refreshSeriesPrefixes();
+    DAILY_RECORDS = parseDailyCsv(ev.target.result, yearHint);
+    if(!DAILY_RECORDS.length){
+      statusEl.innerHTML = '<div class="warn-box">日別データを認識できませんでした。「概要行 → 日付ヘッダ行 → 日別データ行」の形式のCSVをご確認ください。</div>';
+      document.getElementById('dailyTrendControls').style.display = 'none';
+      document.getElementById('dailyRoasBarCard').style.display = 'none';
+      return;
+    }
+    const campaignCount = new Set(DAILY_RECORDS.map(r=>r.name)).size;
+    const dateCount = new Set(DAILY_RECORDS.map(r=>r.date)).size;
+    statusEl.innerHTML = `<div class="status-ok"><span>読み込み <b>${campaignCount}</b> キャンペーン</span><span>期間 <b>${dateCount}</b> 日分</span></div>`;
+    document.getElementById('dailyVersionChecks').innerHTML = '';
+    buildDailySeriesOptions();
+    document.getElementById('dailyTrendControls').style.display = 'block';
+    document.getElementById('dailyRoasBarCard').style.display = 'block';
+    renderDailyVersionChecks();
+    renderDailyChart();
+    renderDailySeriesRoasBar();
+  };
+  reader.readAsText(file, 'utf-8');
+});
+document.getElementById('dailySeriesChecks').addEventListener('change', (e) => {
+  if(e.target.classList.contains('dailySeriesChk')){ renderDailyVersionChecks(); renderDailyChart(); }
+});
+document.getElementById('dailyMetricSelect').addEventListener('change', renderDailyChart);
+document.getElementById('dailyVersionChecks').addEventListener('change', (e) => {
+  if(e.target.classList.contains('dailyVerChk')) renderDailyChart();
+});
 
 // データを貼り付けた時点（集計するボタンを押す前）で媒体・案件・オファーの候補を自動表示する
 let previewTimer = null;
