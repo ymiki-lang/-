@@ -338,12 +338,13 @@
         <tbody>
           <tr><td>brd</td><td>ブロード配信</td><td>② brdグループ（最優先。ただし年齢タグ併記でyokoなしの場合は年齢が優先）</td></tr>
           <tr><td>18-24 / 25-34 / 35-44 / 45-54</td><td>年齢セグメント</td><td>② 年齢セグメントグループ</td></tr>
-          <tr><td>6m / 8m など</td><td>月限定（6月・8月…）＋ オファー（自動検出）</td><td>② 市区切りグループ判定に使用／「オファーで絞り込む」の候補として自動検出</td></tr>
-          <tr><td>7m</td><td>7月限定 ＋ オファー（自動検出）</td><td>② 市区切りグループ判定に使用／「オファーで絞り込む」の候補として自動検出</td></tr>
+          <tr><td>6m / 8m など</td><td>月限定（6月・8月…）</td><td>② 市区切りグループ判定に使用</td></tr>
+          <tr><td>7m</td><td>7月限定</td><td>② 市区切りグループ判定に使用</td></tr>
           <tr><td>st / kb / ks / yh / fo / hs / kt / sp</td><td>さいたま / 神戸 / 川崎 / 横浜 / 福岡 / 広島 / 京都 / 札幌</td><td>② 市区切りグループ</td></tr>
           <tr><td>city1 / city2 など（"city"を含む）</td><td>市区切り</td><td>② 市区切りグループ判定に使用</td></tr>
           <tr><td>store1 / store2 など（"store"を含む）</td><td>店舗切り</td><td>② 店舗切りグループ判定に使用</td></tr>
-          <tr><td>980 / 1650 / 1980 など（数字のみ）</td><td>オファー（○○円オファーとして自動検出）</td><td>事前登録なしで「オファーで絞り込む」に候補として自動表示</td></tr>
+          <tr><td>100en / 980en など（数字+en）</td><td>オファー（○○円オファーとして自動検出）</td><td>事前登録なしで「オファーで絞り込む」に候補として自動表示</td></tr>
+          <tr><td>1 / 980 など（数字のみ）</td><td>番号タグ</td><td>分類には影響しません</td></tr>
           <tr><td>yoko</td><td>横動画</td><td>④ 横動画（タグなし = 縦動画）</td></tr>
           <tr><td>new</td><td>再入稿</td><td>影響なし</td></tr>
           <tr><td>nare / os / ng</td><td>特殊タグ</td><td>影響なし（除外もしない）</td></tr>
@@ -459,6 +460,19 @@ function seriesAltPattern(){
 }
 function findSeriesMatch(text){
   return text.match(new RegExp(`(${seriesAltPattern()})(\\d+)(?:v(\\d+))?`));
+}
+// CP名の末尾に付くシリーズ表記（例：_YT_2030_NST2）を正とし、大文字小文字は区別しない。
+// 同じシリーズでv番号付きの表記が前にあれば、それをサブシリーズとして使う。
+function pickSeriesMatch(text){
+  const re = new RegExp(`(${seriesAltPattern()})(\\d+)(?:v(\\d+))?`, 'gi');
+  const all = [...text.matchAll(re)].map(m => ({
+    prefix: m[1].toUpperCase(), num: m[2], v: m[3] != null ? m[3] : null
+  }));
+  if(!all.length) return null;
+  const last = all[all.length - 1];
+  const withV = all.find(x => x.prefix === last.prefix && parseInt(x.num,10) === parseInt(last.num,10) && x.v != null);
+  const best = withV || last;
+  return [null, best.prefix, best.num, best.v];
 }
 function hasSeriesToken(s){
   return new RegExp(`(?:${seriesAltPattern()})\\d`).test(s);
@@ -632,8 +646,8 @@ function classify(name){
   const idx = name.indexOf('mktag');
   const part = idx >= 0 ? name.slice(idx + 5) : name;
 
-  let m = findSeriesMatch(part);
-  if(!m && idx >= 0) m = findSeriesMatch(name);
+  let m = pickSeriesMatch(part);
+  if(!m && idx >= 0) m = pickSeriesMatch(name);
 
   const seriesPrefix = m ? m[1] : null;
   const seriesNum = m ? parseInt(m[2],10) : null;
@@ -653,10 +667,9 @@ function classify(name){
   const storeWord = tokens.find(t=>/store/i.test(t)) || null;
   // オファーは事前登録なしで自動検出する：数字だけのタグ（例：980, 1650, 1980）は「○○円オファー」、
   // 「N + m」のタグ（例：7m）は「N月限定オファー」として扱う
-  const offer = tokens.find(t=>/^\d+$/.test(t) || /^\d+m$/.test(t)) || null;
-  const offerLabel = offer
-    ? (/^\d+m$/.test(offer) ? `${offer.replace('m','')}月限定オファー` : `${offer}円オファー`)
-    : null;
+  // オファーは「100en」形式のタグだけで判定する（数字のみ・N+m形式は対象外）
+  const offer = tokens.find(t=>/^\d+en$/i.test(t)) || null;
+  const offerLabel = offer ? `${parseInt(offer,10)}円オファー` : null;
 
   let target;
   if(hasBrd && (!age || yoko)) target = 'brd';
@@ -752,11 +765,12 @@ function tokenInfo(t){
   }
   if(t === 'brd')                        return {cls:'tk-tgt', mean:'ブロード配信'};
   if(/^(18-24|25-34|35-44|45-54)$/.test(t)) return {cls:'tk-tgt', mean:`年齢セグメント ${t}`};
-  if((m = t.match(/^(\d+)m$/)))          return {cls:'tk-offer', mean:`${m[1]}月限定オファー（月限定タグ兼用）`};
+  if((m = t.match(/^(\d+)m$/)))          return {cls:'tk-tgt', mean:`${m[1]}月限定`};
   if(CITY_NAMES[t])                      return {cls:'tk-tgt', mean:`都市：${CITY_NAMES[t]}`};
   if(/city/i.test(t))                    return {cls:'tk-tgt', mean:`市区切り（${t}）`};
   if(/store/i.test(t))                   return {cls:'tk-tgt', mean:`店舗切り（${t}）`};
-  if(/^\d+$/.test(t))                    return {cls:'tk-offer', mean:`${t}円オファー`};
+  if(/^\d+en$/i.test(t))                 return {cls:'tk-offer', mean:`${parseInt(t,10)}円オファー`};
+  if(/^\d+$/.test(t))                    return {cls:'', mean:`番号タグ ${t}（分類には影響しません）`};
   if(t === 'yoko')                       return {cls:'tk-yoko', mean:'横動画'};
   if(t === 'new')                        return {cls:'', mean:'再入稿（影響なし）'};
   if(['nare','os','ng'].includes(t))     return {cls:'', mean:'特殊タグ（影響なし）'};
@@ -1519,7 +1533,7 @@ function syncOfferCheckboxes(allRecs){
   const wrap = document.getElementById('offerFilterOptions');
   const prevChecked = new Set([...wrap.querySelectorAll('.offerTagChk:checked')].map(el=>el.value));
   if(!offerSet.length){
-    wrap.innerHTML = '<span class="hint">オファータグを検出できませんでした（数字だけのタグや「N月」形式のタグがあると自動認識します）。</span>';
+    wrap.innerHTML = '<span class="hint">オファータグを検出できませんでした（「100en」形式のタグがあると自動認識します）。</span>';
     return offerSet;
   }
   wrap.innerHTML = offerSet.map(v => `
@@ -1556,21 +1570,4 @@ document.getElementById('projectFilterOptions').addEventListener('change', (e) =
 // 貼り付けデータから案件（プロジェクト）名を検出し、チェックボックスを同期する
 // （既存のチェック状態は維持し、新しく見つかった案件だけ追加する）
 function syncProjectCheckboxes(allRecs){
-  const projects = [...new Set(allRecs.map(r => classify(r.name).project).filter(Boolean))]
-    .sort((a,b)=>a.localeCompare(b,'ja'));
-  const wrap = document.getElementById('projectFilterOptions');
-  const prevChecked = new Set([...wrap.querySelectorAll('.projectChk:checked')].map(el=>el.value));
-  if(!projects.length){
-    wrap.innerHTML = '<span class="hint">案件名を検出できませんでした（CP名の構造をご確認ください）。</span>';
-    return projects;
-  }
-  wrap.innerHTML = projects.map(p => `
-    <label class="offer-chip">
-      <input type="checkbox" class="projectChk" value="${esc(p)}" ${prevChecked.has(p) ? 'checked' : ''}>
-      ${esc(p)}
-    </label>`).join('');
-  return projects;
-}
-</script>
-</body>
-</html>
+  const projects = [...new Set(allRe
