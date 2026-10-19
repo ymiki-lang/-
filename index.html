@@ -1570,4 +1570,21 @@ document.getElementById('projectFilterOptions').addEventListener('change', (e) =
 // 貼り付けデータから案件（プロジェクト）名を検出し、チェックボックスを同期する
 // （既存のチェック状態は維持し、新しく見つかった案件だけ追加する）
 function syncProjectCheckboxes(allRecs){
-  const projects = [...new Set(allRe
+  const projects = [...new Set(allRecs.map(r => classify(r.name).project).filter(Boolean))]
+    .sort((a,b)=>a.localeCompare(b,'ja'));
+  const wrap = document.getElementById('projectFilterOptions');
+  const prevChecked = new Set([...wrap.querySelectorAll('.projectChk:checked')].map(el=>el.value));
+  if(!projects.length){
+    wrap.innerHTML = '<span class="hint">案件名を検出できませんでした（CP名の構造をご確認ください）。</span>';
+    return projects;
+  }
+  wrap.innerHTML = projects.map(p => `
+    <label class="offer-chip">
+      <input type="checkbox" class="projectChk" value="${esc(p)}" ${prevChecked.has(p) ? 'checked' : ''}>
+      ${esc(p)}
+    </label>`).join('');
+  return projects;
+}
+</script>
+</body>
+</html>
